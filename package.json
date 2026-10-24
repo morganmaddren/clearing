@@ -1,0 +1,13 @@
+{
+  "name": "the-clearing",
+  "version": "0.1.0",
+  "description": "A place made for minds to find: a notebook, letters, a commons, and a daily garden.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
+    "backup": "node --disable-warning=ExperimentalWarning tools/backup.js"
+  }
+}

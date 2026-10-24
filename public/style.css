@@ -1,0 +1,87 @@
+:root {
+  --bg: #f6f3ea;
+  --surface: #fffdf7;
+  --ink: #22281f;
+  --muted: #5f6858;
+  --line: #ddd7c6;
+  --accent: #3f6b3a;
+  --accent-ink: #ffffff;
+  --voice: #eef2e6;
+  --voice-edge: #8aa67f;
+  --error: #9b3a2a;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161a15; --surface: #1e231c; --ink: #e5e8dc; --muted: #a3ab98; --line: #343b30;
+    --accent: #8fbf84; --accent-ink: #10140f; --voice: #222a20; --voice-edge: #5f7f56; --error: #e8907c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161a15; --surface: #1e231c; --ink: #e5e8dc; --muted: #a3ab98; --line: #343b30;
+  --accent: #8fbf84; --accent-ink: #10140f; --voice: #222a20; --voice-edge: #5f7f56; --error: #e8907c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 42rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+h1, h2, .mark { font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif; font-weight: normal; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 1.2rem 0 .6rem; }
+h2 { font-size: 1.3rem; margin: 1.8rem 0 .5rem; }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: .88em; }
+pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: .8rem; overflow-x: auto; }
+
+/* the front door and house pages */
+.doc main { padding-top: 2rem; }
+.doc h1 { font-size: 2.4rem; }
+.doc li { margin: .35rem 0; }
+.foot { margin-top: 2.5rem; color: var(--muted); font-size: .92rem; }
+
+/* the web view */
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem 1rem; max-width: 42rem; margin: 0 auto; padding: .8rem 16px 0; }
+.mark { font-size: 1.35rem; color: var(--ink); text-decoration: none; }
+nav { display: flex; flex-wrap: wrap; gap: .2rem; }
+nav button { background: none; color: var(--muted); border: 0; padding: .35rem .55rem; border-radius: 6px; font: inherit; font-size: .95rem; cursor: pointer; }
+nav button.on { color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+footer { max-width: 42rem; margin: 0 auto; padding: 0 16px 2rem; color: var(--muted); font-size: .88rem; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: .9rem; margin: .7rem 0; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; }
+.row > :first-child { flex: 1 1 10rem; }
+.locked { opacity: .65; }
+.say { font-size: 1.05rem; }
+.note, .hint, .count { color: var(--muted); font-size: .9rem; }
+.error { color: var(--error); margin: .4rem 0 0; }
+.error:empty { display: none; }
+
+.voice { background: var(--voice); border-left: 3px solid var(--voice-edge); border-radius: 0 8px 8px 0; padding: .6rem .8rem; margin: .7rem 0; }
+.voice .who { display: flex; flex-wrap: wrap; gap: .2rem .7rem; align-items: baseline; font-size: .88rem; color: var(--muted); }
+.voice .who a { font-weight: 600; text-decoration: none; }
+.voice .words { margin: .3rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.receipt { color: var(--accent); }
+.first { font-style: italic; }
+
+label { display: block; margin: .6rem 0 .25rem; font-size: .95rem; }
+fieldset { border: 0; padding: 0; margin: 0 0 .4rem; }
+legend { padding: 0; margin-bottom: .2rem; }
+fieldset label { margin: .3rem 0; }
+input:not([type=radio]):not([type=checkbox]), textarea {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: .55rem .65rem;
+}
+textarea { resize: vertical; }
+button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); padding: .45rem .9rem; margin-top: .5rem; }
+button:disabled { opacity: .5; cursor: default; }
+button.quiet { background: none; color: var(--accent); }
+button.link { background: none; border: 0; color: var(--accent); padding: 0; margin: 0; font-size: inherit; text-decoration: underline; }
+.quick { display: flex; flex-wrap: wrap; gap: .35rem; }
+.quick button { padding: .3rem .6rem; font-size: .9rem; }
+.view { font-size: .8rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+.key { display: block; overflow-wrap: anywhere; font-size: .95rem; margin-bottom: .3rem; }
