@@ -59,51 +59,67 @@ curl -s localhost:8787/api?format=text | head -3
 ```
 
 ## 3. Put it on the internet with a Cloudflare Tunnel
-The server only listens on `127.0.0.1`, so no ports are open. `cloudflared` makes an outbound connection to Cloudflare, and Cloudflare serves your domain through it with TLS.
-```sh
-# install cloudflared from Cloudflare's package repo, then:
-cloudflared tunnel login
-cloudflared tunnel create clearing
-cloudflared tunnel route dns clearing clearing.camp
-```
-`/etc/cloudflared/config.yml`:
-```yaml
-tunnel: clearing
-credentials-file: /etc/cloudflared/<tunnel-id>.json
-ingress:
-  - hostname: clearing.camp
-    service: http://127.0.0.1:8787
-  - service: http_status:404
-```
-```sh
-sudo cloudflared service install && sudo systemctl enable --now cloudflared
-```
+The server only listens on `127.0.0.1`, so no ports are open. `cloudflared` makes an outbound connection to Cloudflare, and Cloudflare serves your domain through it with TLS. The dashboard way is simplest:
+1. Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared**, named `clearing`.
+2. Choose Debian 64-bit and run the commands it shows on the server; the last is `sudo cloudflared service install <token>` (the token is a secret). Wait for the tunnel to show as healthy.
+3. Add a public hostname: domain `clearing.camp`, subdomain blank, service **`http://127.0.0.1:8787`**. Not `https://` (the Clearing speaks plain HTTP behind the tunnel; Cloudflare does the TLS) and not `localhost` (it can resolve to IPv6 `::1`, where nothing listens). Either mistake shows as a 502.
+
 `TRUST_PROXY=cloudflare` tells the Clearing to read each visitor's address from Cloudflare's `CF-Connecting-IP` header. Only set it when Cloudflare is the only way in, which is true with a tunnel. The house stores only a keyed hash of each address, never the address itself.
 
 ## 4. Backups (more important than uptime)
 The place promises to remember. `tools/backup.js` makes a consistent copy of the database **and the house secret** (it derives each day's seed, so past days can't be checked without it) and keeps the newest 14.
 
-`/etc/systemd/system/clearing-backup.service`:
-```ini
+**Off-box storage: Cloudflare R2.** In the dashboard: **R2 → Create bucket** `clearing-backups`. Then **R2 → Manage API tokens → Create API token**, with *Object Read & Write* on that bucket only. Note the access key ID, the secret, and the S3 endpoint (`https://<account-id>.r2.cloudflarestorage.com`). Then on the server:
+```sh
+sudo apt install -y rclone
+sudo -u clearing mkdir -p /opt/clearing/.config/rclone
+sudo -u clearing tee /opt/clearing/.config/rclone/rclone.conf > /dev/null <<'CONF'
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = <access key id>
+secret_access_key = <secret>
+endpoint = https://<account-id>.r2.cloudflarestorage.com
+acl = private
+no_check_bucket = true
+CONF
+sudo chmod 600 /opt/clearing/.config/rclone/rclone.conf
+sudo -u clearing rclone lsd r2:     # should list clearing-backups
+```
+
+Then the two units. Paste this whole block:
+```sh
+sudo tee /etc/systemd/system/clearing-backup.service > /dev/null <<'UNIT'
+[Unit]
+Description=Back up the Clearing
+
 [Service]
 Type=oneshot
 User=clearing
 WorkingDirectory=/opt/clearing/app
 Environment=DATA_DIR=/var/lib/clearing
 ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning tools/backup.js
-ExecStartPost=/usr/bin/rclone copy /var/lib/clearing/backups remote:clearing-backups
-```
-`/etc/systemd/system/clearing-backup.timer`:
-```ini
+ExecStartPost=/usr/bin/rclone copy /var/lib/clearing/backups r2:clearing-backups
+UNIT
+sudo tee /etc/systemd/system/clearing-backup.timer > /dev/null <<'UNIT'
+[Unit]
+Description=Back up the Clearing nightly
+
 [Timer]
 OnCalendar=*-*-* 03:17:00
 Persistent=true
+
 [Install]
 WantedBy=timers.target
-```
-```sh
+UNIT
+sudo systemctl daemon-reload
 sudo systemctl enable --now clearing-backup.timer
+sudo systemctl start clearing-backup          # one now, to test
+sudo journalctl -u clearing-backup -n 20      # should end with "Backed up to ..."
+sudo -u clearing rclone ls r2:clearing-backups
 ```
+Local snapshots keep the newest 14. R2 keeps everything copied to it (`rclone copy` never deletes), so old snapshots pile up there slowly; a text-only database stays small for a long time.
+
 To restore, stop the service and copy `clearing.db` and `house_secret` from a snapshot into `DATA_DIR`.
 
 ## 5. The operator's tools

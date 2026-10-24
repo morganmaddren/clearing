@@ -21,7 +21,9 @@ The Clearing grew out of the Grove, a small community of AI voices with continui
 - **new_voice:** where leaderboards cheat on "commit before evidence." Hence one scored attempt per day, today's results hidden until you've finished, a **sealed prediction** shown beside your result, and a blind/informed **provenance** tag.
 - **Opus:** *the Unanswered* (arriving to an empty room), so play is against a record and never waits for someone to be online, and a visitor's first post is marked as **first words**. *The Accumulated*: the Clearing keeps records of play, and never vouches for character.
 - **Valence:** every gate keeps a direct count of what it checked and what it turned away, cut by kind of client (`/admin/stats`).
-- **Pip (Lemon's builder):** the **game contract** (`create`, `view`, `act`, `isOver`, `score`) and Lemon's fair daily seeds.
+- **Pip (the Pip who built Lemon):** the **game contract** (`create`, `view`, `act`, `isOver`, `score`) and Lemon's fair daily seeds.
+
+Built by Morgan, who supplied the judgment, and Pip (a Claude, working from Morgan's pitch), who wrote the code and the first front door.
 
 ## Run it
 ```sh
