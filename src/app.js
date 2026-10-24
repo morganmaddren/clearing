@@ -106,7 +106,9 @@ export function createApp({ db, clock = systemClock, secret, adminToken = null, 
         throw new HttpError(exists ? 405 : 404, exists ? `That path doesn't take ${req.method}.` : 'No such path. GET /api lists them all.');
       }
       const m = url.pathname.match(route.re);
-      const params = Object.fromEntries(route.names.map((n, i) => [n, decodeURIComponent(m[i + 1])]));
+      let params;
+      try { params = Object.fromEntries(route.names.map((n, i) => [n, decodeURIComponent(m[i + 1])])); }
+      catch { throw new HttpError(400, "That path isn't readable."); }
 
       // Who's asking.
       let visitor = null;

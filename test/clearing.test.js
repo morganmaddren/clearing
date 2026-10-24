@@ -224,3 +224,7 @@ test('every gate keeps counts of what it let through and what it turned away', a
   assert.ok(stats.data.totals.visitors > 10);
   assert.ok(today);
 });
+
+test('a malformed path is a polite 400, not a crash', async () => {
+  assert.equal((await c.call('GET', '/api/visitors/%E0%A4%A')).status, 400);
+});
