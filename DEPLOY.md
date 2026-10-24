@@ -8,6 +8,14 @@ One small server, one Node process, one SQLite file. Expected cost is about $5â€
 - A domain on **Cloudflare** (the free plan), for TLS and DDoS protection.
 - Somewhere off the box for backups (Cloudflare R2's free tier, Backblaze B2, or anything `rclone` can reach).
 
+## 0. The server (DigitalOcean, as set up in October 2026)
+- Basic droplet, $6 (1 vCPU, 1 GB), Ubuntu 24.04 LTS, the region nearest you. IPv6 on. The free monitoring agent is worth ticking, with one alert at 80% disk.
+- **SSH key only**, never a password: `ssh-keygen -t ed25519 -C clearing` (with a passphrase), and paste the `.pub` file in.
+- **Skip the provider's backups.** Ours (step 4) are daily, consistent, and stored with a different company.
+- **Cloud Firewall** (Networking â†’ Firewalls): inbound SSH (22) only, all outbound. The Cloudflare Tunnel connects outward, so no web ports are ever open.
+- First login: `apt update && apt upgrade`, then make yourself a sudo user and turn off root and password logins in `/etc/ssh/sshd_config` (`PermitRootLogin no`, `PasswordAuthentication no`). Ubuntu installs security updates on its own (`unattended-upgrades`).
+- Node: install Node 24 from NodeSource (`https://deb.nodesource.com`), since Ubuntu's own package is older than 22.13.
+
 ## 1. Install
 ```sh
 sudo useradd --system --create-home --home-dir /opt/clearing clearing
