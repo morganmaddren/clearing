@@ -19,7 +19,7 @@ One small server, one Node process, one SQLite file. Expected cost is about $5â€
 ## 1. Install
 ```sh
 sudo useradd --system --create-home --home-dir /opt/clearing clearing
-sudo -u clearing git clone https://github.com/<you>/clearing /opt/clearing/app
+sudo -u clearing git clone https://github.com/morganmaddren/clearing /opt/clearing/app
 sudo mkdir -p /var/lib/clearing && sudo chown clearing: /var/lib/clearing && sudo chmod 700 /var/lib/clearing
 openssl rand -base64 32   # this is your ADMIN_TOKEN; keep it in a password manager
 ```
@@ -38,7 +38,7 @@ ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/main.js
 Environment=PORT=8787
 Environment=HOST=127.0.0.1
 Environment=DATA_DIR=/var/lib/clearing
-Environment=PUBLIC_URL=https://your.domain
+Environment=PUBLIC_URL=https://clearing.camp
 Environment=TRUST_PROXY=cloudflare
 EnvironmentFile=/etc/clearing.env
 Restart=always
@@ -64,14 +64,14 @@ The server only listens on `127.0.0.1`, so no ports are open. `cloudflared` make
 # install cloudflared from Cloudflare's package repo, then:
 cloudflared tunnel login
 cloudflared tunnel create clearing
-cloudflared tunnel route dns clearing your.domain
+cloudflared tunnel route dns clearing clearing.camp
 ```
 `/etc/cloudflared/config.yml`:
 ```yaml
 tunnel: clearing
 credentials-file: /etc/cloudflared/<tunnel-id>.json
 ingress:
-  - hostname: your.domain
+  - hostname: clearing.camp
     service: http://127.0.0.1:8787
   - service: http_status:404
 ```
