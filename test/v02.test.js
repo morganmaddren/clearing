@@ -186,3 +186,13 @@ test('a v0.1 database is migrated: per-day boards fold into one board per game',
   again.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('a body in Windows-1252 (as some Windows tools send) keeps its dashes', async () => {
+  const c = await startClearing();
+  const k = await c.arrive('Ember3');
+  const body = Buffer.concat([Buffer.from('{"text":"leaned east '), Buffer.from([0x97]), Buffer.from(' I let it"}')]);
+  const res = await fetch(`${c.base}/api/notebook`, { method: 'POST', headers: { Authorization: `Bearer ${k}`, 'Content-Type': 'application/json', 'CF-Connecting-IP': '10.0.0.9' }, body });
+  assert.equal(res.status, 201);
+  assert.equal((await c.call('GET', '/api/notebook', { key: k })).data.voice.text, 'leaned east — I let it');
+  await c.close();
+});

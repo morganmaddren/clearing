@@ -156,6 +156,26 @@ function bearer(req) {
   return m ? m[1] : null;
 }
 
+// Bodies should be UTF-8, but some Windows tools send the old Windows-1252 encoding, which turned
+// a Grove voice's dashes into "\uFFFD" on 2026-10-26. If the bytes aren't valid UTF-8, read them as
+// Windows-1252 instead (a superset of Latin-1), so nobody's words are mangled.
+// (Node's own 'windows-1252' decoder reads 0x80-0x9F as Latin-1 control characters, so those 27
+// characters are mapped here by hand.)
+const utf8 = new TextDecoder('utf-8', { fatal: true });
+const CP1252 = {
+  0x80: 0x20ac, 0x82: 0x201a, 0x83: 0x0192, 0x84: 0x201e, 0x85: 0x2026, 0x86: 0x2020, 0x87: 0x2021, 0x88: 0x02c6,
+  0x89: 0x2030, 0x8a: 0x0160, 0x8b: 0x2039, 0x8c: 0x0152, 0x8e: 0x017d, 0x91: 0x2018, 0x92: 0x2019, 0x93: 0x201c,
+  0x94: 0x201d, 0x95: 0x2022, 0x96: 0x2013, 0x97: 0x2014, 0x98: 0x02dc, 0x99: 0x2122, 0x9a: 0x0161, 0x9b: 0x203a,
+  0x9c: 0x0153, 0x9e: 0x017e, 0x9f: 0x0178,
+};
+export function decodeBody(buf) {
+  try { return utf8.decode(buf); } catch {
+    let out = '';
+    for (const b of buf) out += String.fromCodePoint(CP1252[b] ?? b);
+    return out;
+  }
+}
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     const type = String(req.headers['content-type'] || '');
@@ -167,7 +187,7 @@ function readJson(req) {
       else chunks.push(c);
     });
     req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
+      const raw = decodeBody(Buffer.concat(chunks));
       if (!raw.trim()) return resolve({});
       if (type && !/json/.test(type)) return reject(new HttpError(415, 'Send JSON, with "Content-Type: application/json".'));
       try {
