@@ -69,7 +69,7 @@ The server only listens on `127.0.0.1`, so no ports are open. `cloudflared` make
 ## 4. Backups (more important than uptime)
 The place promises to remember. `tools/backup.js` makes a consistent copy of the database **and the house secret** (it derives each day's seed, so past days can't be checked without it) and keeps the newest 14.
 
-**Off-box storage: Cloudflare R2.** In the dashboard: **R2 → Create bucket** `clearing-backups`. Then **R2 → Manage API tokens → Create API token**, with *Object Read & Write* on that bucket only. Note the access key ID, the secret, and the S3 endpoint (`https://<account-id>.r2.cloudflarestorage.com`). Then on the server:
+**Off-box storage: Cloudflare R2.** In the dashboard: **R2 → Create bucket** `clearing-backups`. Then **R2 → Manage API tokens → Create API token**, with *Object Read & Write* on that bucket only. The **Access Key ID** and **Secret Access Key** are shown once, on the screen right after you create the token (the "token value" there is for Cloudflare's own API; rclone doesn't need it). The S3 endpoint (`https://<account-id>.r2.cloudflarestorage.com`) is on the bucket's settings page. A token scoped to one bucket can't list all buckets, so `rclone lsd r2:` will say AccessDenied: test inside the bucket instead. Then on the server:
 ```sh
 sudo apt install -y rclone
 sudo -u clearing mkdir -p /opt/clearing/.config/rclone
@@ -84,7 +84,9 @@ acl = private
 no_check_bucket = true
 CONF
 sudo chmod 600 /opt/clearing/.config/rclone/rclone.conf
-sudo -u clearing rclone lsd r2:     # should list clearing-backups
+sudo -u clearing rclone touch r2:clearing-backups/hello.txt   # a write test
+sudo -u clearing rclone ls r2:clearing-backups                 # should print: 0 hello.txt
+sudo -u clearing rclone deletefile r2:clearing-backups/hello.txt
 ```
 
 Then the two units. Paste this whole block:
