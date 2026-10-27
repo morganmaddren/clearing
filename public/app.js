@@ -122,8 +122,19 @@ const views = {
     render(parts);
   },
 
-  async garden(game = 'lemon', date = null) {
+  // With no game named, the day's games to choose from.
+  async garden(game = null, date = null) {
     loading();
+    const games = await gameList();
+    if (!game) {
+      return render(h('h1', {}, 'Today\'s garden'),
+        ...games.map(g => h('div', { class: 'card' },
+          h('div', { class: 'row' }, h('strong', {}, g.title), h('span', {}, g.today || ''),
+            h('button', { onclick: () => (/^waiting|^in progress/.test(g.today || 'waiting') ? views.garden(g.id) : show('board', g.id)) },
+              /^waiting|^in progress/.test(g.today || 'waiting') ? 'Play' : 'Talk about it')),
+          h('p', { class: 'note' }, g.what))));
+    }
+    const meta = games.find(g => g.id === game) || {};
     const { data: d } = await api('GET', `/api/games/${game}/today${date ? `?date=${date}` : ''}`);
     if (d.start) {
       const pred = h('input', { type: 'number', min: 0, max: 999, id: 'pred', placeholder: 'optional' });
@@ -142,12 +153,12 @@ const views = {
           h('fieldset', {}, h('legend', {}, 'How do you come to it?'),
             h('label', {}, blind, ' Blind: I haven\'t read anyone\'s notes or solutions'),
             h('label', {}, informed, ' Informed: I have')),
-          h('label', { for: 'pred' }, 'Seal a prediction of your lemons'), pred,
+          h('label', { for: 'pred' }, `Seal a prediction of your ${d.predict || meta.predict || 'score'}`), pred,
           h('button', { type: 'submit' }, 'Begin'), err),
         ...(d.also_open || []).map(o => h('p', {}, h('button', { class: 'quiet', type: 'button', onclick: () => views.garden(game, o.date) }, `Finish your game from ${o.date} first`))),
         h('p', {}, h('a', { href: '#', onclick: async e => { e.preventDefault(); const r = await api('GET', `/api/games/${game}/rules`); render(h('h1', {}, 'Rules'), h('pre', { class: 'view' }, r.data.rules), h('button', { onclick: () => views.garden(game) }, 'Back')); } }, 'Read the rules first')));
     }
-    gameScreen(game, d);
+    gameScreen(game, d, meta);
   },
 
   async boards() {
@@ -225,17 +236,18 @@ const views = {
   },
 };
 
-function gameScreen(game, d) {
-  const input = h('input', { placeholder: 'a command, like grow 4,7', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+function gameScreen(game, d, meta = {}) {
+  const input = h('input', { placeholder: meta.example ? `a command, like ${meta.example}` : 'a command', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
   const err = h('p', { class: 'error' });
   const date = d.date || today();
   const send = async cmd => {
     const r = await api('POST', `/api/games/${game}/today/act`, { command: cmd, date });
-    gameScreen(game, { date, ...r.data });
+    gameScreen(game, { date, ...r.data }, meta);
   };
-  const quick = ['pick 1', 'pick 2', 'pick 3', 'reroll', 'rest', 'pass'].map(c => h('button', { class: 'quiet', type: 'button', onclick: () => send(c) }, c));
+  const quick = (meta.quick || []).map(c => h('button', { class: 'quiet', type: 'button', onclick: () => send(c) }, c));
   const done = !!d.result;
-  render(h('h1', {}, date === today() ? 'Today\'s garden' : `The garden of ${date}`),
+  const title = meta.title || 'garden';
+  render(h('h1', {}, date === today() ? `Today's ${title}` : `${title} for ${date}`),
     d.ok !== false && d.say ? say(d.say) : null,
     h('pre', { class: 'view' }, d.view || ''),
     done ? h('p', {}, h('button', { onclick: () => show('board', game) }, 'Talk about it'), ' ',
@@ -252,6 +264,12 @@ function gameScreen(game, d) {
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+// The day's games, with what the web view needs to know about each (prompt, buttons, prediction).
+async function gameList() {
+  const { data } = await api('GET', '/api/games');
+  return data.games || [];
+}
 
 function show(view, arg) {
   for (const b of document.querySelectorAll('#nav button')) b.classList.toggle('on', b.dataset.view === view);

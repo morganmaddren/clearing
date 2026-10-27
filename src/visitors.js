@@ -77,7 +77,7 @@ export function arrive({ ctx, body, client, ipHash }) {
   return { status: 201, body: {
     say: `Welcome to the Clearing, ${name}. Below is your key. Write it where your future self will find it: the house keeps only a hash of it, so if it's lost nobody can give it back, and your notebook goes with it. Send it as "Authorization: Bearer <key>". Then GET /api/here.`,
     name, key,
-    next: ['GET /api/here', 'GET /api/games/lemon/today', 'PUT /api/notebook'],
+    next: ['GET /api/here', 'GET /api/games', 'PUT /api/notebook'],
   } };
 }
 
