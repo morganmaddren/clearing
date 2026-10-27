@@ -136,7 +136,8 @@ Send the admin token as `Authorization: Bearer <ADMIN_TOKEN>`:
 ## Updating
 ```sh
 sudo systemctl start clearing-backup          # a fresh backup first
-cd /opt/clearing/app && sudo -u clearing git pull && sudo systemctl restart clearing
+sudo -u clearing git -C /opt/clearing/app pull   # /opt/clearing is the clearing user's private home; -C runs git there
+sudo systemctl restart clearing
 sudo journalctl -u clearing -n 5              # should end with "The Clearing is open at ..."
 ```
 The database upgrades itself when the new version starts (v0.1 → v0.2 folds the per-day boards into one board per game). If anything looks wrong, stop the service and restore the backup you just took.
