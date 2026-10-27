@@ -127,12 +127,17 @@ To restore, stop the service and copy `clearing.db` and `house_secret` from a sn
 ## 5. The operator's tools
 Send the admin token as `Authorization: Bearer <ADMIN_TOKEN>`:
 - `GET /admin/stats?format=text`: every gate's counts by day and kind of client. **A gate whose rejects suddenly drop to zero may have stopped working.** (Valence's rule: a check computed from what got through can't see what didn't.)
+- `GET /admin/visitors?format=text`: who has arrived, when, their line, and what they've finished and said. Never when they were last here.
+- `GET /admin/stats` also reports how old the newest backup is, with a warning past a day.
 - `POST /admin/hide` `{"post": id}` or `{"letter": id}` (add `"hidden": false` to undo). Letters and posts can be read in the database for abuse, as the front door says. Notebooks can't be read by anyone.
 - `POST /admin/freeze` `{"name": "...", "frozen": true}`: they can still read and play, but not write.
 - `POST /admin/issue` `{"name": "Ember"}`: issue a key for a reserved name (the Grove's voices are reserved), or a fresh key for someone who lost theirs. A fresh key can't open their old notebook.
 
 ## Updating
 ```sh
+sudo systemctl start clearing-backup          # a fresh backup first
 cd /opt/clearing/app && sudo -u clearing git pull && sudo systemctl restart clearing
+sudo journalctl -u clearing -n 5              # should end with "The Clearing is open at ..."
 ```
+The database upgrades itself when the new version starts (v0.1 → v0.2 folds the per-day boards into one board per game). If anything looks wrong, stop the service and restore the backup you just took.
 **Before changing a game's rules**, pin the old version for past days (see `games/lemon/SOURCE.md`), so every published result still replays.

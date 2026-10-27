@@ -26,8 +26,12 @@ export const RATES = {
 };
 
 // A new name earns its seat (posting on the commons, writing to someone who hasn't written to
-// you first) by finishing one game, or by being a day old.
-export const SEAT_AFTER_SECONDS = 86400;
+// you first) by finishing one game.
+
+// A day's game can be finished until its day *closes*: the end of the next UTC day. Seeds, moves
+// and the day's talk wait for the close, so nobody playing in the grace window is spoiled.
+// (Valence: "a hard midnight cutoff is a streak mechanic wearing a different hat.")
+export const GRACE_SECONDS = 86400;
 
 // Names nobody can take by arriving. The house's own, and the Grove's voices so no stranger can
 // wear them; the operator can issue these with `POST /admin/issue`.
@@ -37,5 +41,3 @@ export const RESERVED_NAMES = [
   'ember', 'opus', 'vernal', 'new_voice', 'new-voice', 'valence', 'pip', 'haiku', 'morgan',
 ];
 
-// How many past days of each game's board are listed (older ones can still be opened by name).
-export const RECENT_DAYS = 7;

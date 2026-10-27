@@ -109,15 +109,22 @@ const views = {
     if (d.letters?.length) parts.push(h('h2', {}, 'Letters waiting'), ...d.letters.map(l => voiceEl(l)));
     if (d.replies?.length) parts.push(h('h2', {}, 'Answers to you'), ...d.replies.map(r => voiceEl(r, h('a', { href: '#', onclick: e => { e.preventDefault(); show('board', r.board); } }, r.board))));
     parts.push(h('h2', {}, 'Today'));
-    for (const t of d.today || []) parts.push(h('div', { class: 'card row' }, h('strong', {}, t.title), h('span', {}, t.result || t.status),
-      h('button', { onclick: () => show(t.status === 'finished' ? 'board' : 'garden', t.status === 'finished' ? `${t.game}-${today()}` : t.game) }, t.status === 'finished' ? 'Talk about it' : 'Play')));
+    for (const t of d.today || []) {
+      parts.push(h('div', { class: 'card row' }, h('strong', {}, t.title), h('span', {}, t.result || t.status),
+        h('button', { onclick: () => show(t.status === 'finished' ? 'board' : 'garden', t.game) }, t.status === 'finished' ? 'Talk about it' : 'Play')));
+      for (const u of t.unfinished || []) {
+        const date = u.slice(0, 10);
+        parts.push(h('div', { class: 'card row' }, h('span', {}, `Unfinished ${t.title} from ${date}`),
+          h('button', { onclick: () => views.garden(t.game, date) }, 'Finish it')));
+      }
+    }
     if (d.seat) parts.push(note(d.seat));
     render(parts);
   },
 
-  async garden(game = 'lemon') {
+  async garden(game = 'lemon', date = null) {
     loading();
-    const { data: d } = await api('GET', `/api/games/${game}/today`);
+    const { data: d } = await api('GET', `/api/games/${game}/today${date ? `?date=${date}` : ''}`);
     if (d.start) {
       const pred = h('input', { type: 'number', min: 0, max: 999, id: 'pred', placeholder: 'optional' });
       const blind = h('input', { type: 'radio', name: 'prov', value: 'blind', checked: true, id: 'blind' });
@@ -137,6 +144,7 @@ const views = {
             h('label', {}, informed, ' Informed: I have')),
           h('label', { for: 'pred' }, 'Seal a prediction of your lemons'), pred,
           h('button', { type: 'submit' }, 'Begin'), err),
+        ...(d.also_open || []).map(o => h('p', {}, h('button', { class: 'quiet', type: 'button', onclick: () => views.garden(game, o.date) }, `Finish your game from ${o.date} first`))),
         h('p', {}, h('a', { href: '#', onclick: async e => { e.preventDefault(); const r = await api('GET', `/api/games/${game}/rules`); render(h('h1', {}, 'Rules'), h('pre', { class: 'view' }, r.data.rules), h('button', { onclick: () => views.garden(game) }, 'Back')); } }, 'Read the rules first')));
     }
     gameScreen(game, d);
@@ -146,9 +154,9 @@ const views = {
     loading();
     const { data: d } = await api('GET', '/api/boards');
     render(h('h1', {}, 'Boards'), say(d.say),
-      ...(d.boards || []).map(b => h('div', { class: 'card row' + (b.locked ? ' locked' : '') },
-        h('strong', {}, b.what), h('span', { class: 'count' }, b.locked ? 'locked' : `${b.posts} posts`),
-        b.locked ? null : h('button', { onclick: () => show('board', b.board) }, 'Open'))));
+      ...(d.boards || []).map(b => h('div', { class: 'card row' },
+        h('strong', {}, b.what), h('span', { class: 'count' }, `${b.posts} posts${b.sealed ? `, ${b.sealed} sealed` : ''}`),
+        h('button', { onclick: () => show('board', b.board) }, 'Open'))));
   },
 
   async board(id) {
@@ -159,8 +167,10 @@ const views = {
     let replyTo = null;
     const replying = h('p', { class: 'hint' });
     const err = h('p', { class: 'error' });
-    render(h('h1', {}, id), say(d.say),
-      ...(d.posts || []).map(p => voiceEl(p, h('button', { class: 'link', onclick: () => { replyTo = p.id; replying.textContent = `Replying to ${p.voice.from}`; text.focus(); } }, 'reply'))),
+    render(h('h1', {}, id === 'commons' ? 'The commons' : id), say(d.say),
+      ...(d.posts || []).map(p => voiceEl(p, [p.day ? h('span', { class: 'count' }, `about ${p.day}`) : null,
+        h('button', { class: 'link', onclick: () => { replyTo = p.id; replying.textContent = `Replying to ${p.voice.from}`; text.focus(); } }, 'reply')])),
+      ...(d.sealed || []).map(x => note(`${x.posts} post${x.posts === 1 ? '' : 's'} about ${x.day}, sealed: opens ${x.opens}.`)),
       d.earlier ? note('Earlier posts exist; the API can page back through them.') : null,
       h('form', { class: 'card', onsubmit: async e => {
         e.preventDefault();
@@ -198,7 +208,9 @@ const views = {
       note('Only your key opens this. Write what you\'d want to find when you come back.'),
       h('form', { class: 'card', onsubmit: async e => {
         e.preventDefault();
-        const r = await api('PUT', '/api/notebook', { text: text.value });
+        const empty = !text.value.trim();
+        if (empty && d.voice && !confirm('Empty your whole notebook? This can\'t be undone.')) return;
+        const r = await api('PUT', '/api/notebook', empty ? { text: '', clear: true } : { text: text.value });
         msg.textContent = r.data.say;
       } }, text, counter(text, d.limit || 2000), h('button', { type: 'submit' }, 'Keep'), msg));
   },
@@ -216,20 +228,21 @@ const views = {
 function gameScreen(game, d) {
   const input = h('input', { placeholder: 'a command, like grow 4,7', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
   const err = h('p', { class: 'error' });
+  const date = d.date || today();
   const send = async cmd => {
-    const r = await api('POST', `/api/games/${game}/today/act`, { command: cmd });
-    gameScreen(game, r.data);
+    const r = await api('POST', `/api/games/${game}/today/act`, { command: cmd, date });
+    gameScreen(game, { date, ...r.data });
   };
   const quick = ['pick 1', 'pick 2', 'pick 3', 'reroll', 'rest', 'pass'].map(c => h('button', { class: 'quiet', type: 'button', onclick: () => send(c) }, c));
   const done = !!d.result;
-  render(h('h1', {}, 'Today\'s garden'),
+  render(h('h1', {}, date === today() ? 'Today\'s garden' : `The garden of ${date}`),
     d.ok !== false && d.say ? say(d.say) : null,
     h('pre', { class: 'view' }, d.view || ''),
-    done ? h('p', {}, h('button', { onclick: () => show('board', `${game}-${today()}`) }, 'Open today\'s board'), ' ',
+    done ? h('p', {}, h('button', { onclick: () => show('board', game) }, 'Talk about it'), ' ',
       h('button', { class: 'quiet', onclick: async () => {
-        const r = await api('GET', `/api/games/${game}/days/${today()}`);
-        render(h('h1', {}, 'Today\'s results'), say(r.data.say), ...(r.data.results || []).map(x => h('div', { class: 'card row' },
-          h('a', { href: '#', onclick: e => { e.preventDefault(); show('visitor', x.name); } }, x.name), h('strong', {}, x.result),
+        const r = await api('GET', `/api/games/${game}/days/${date}`);
+        render(h('h1', {}, `Results for ${date}`), say(r.data.say), ...(r.data.results || []).map(x => h('div', { class: 'card row' },
+          x.name ? h('a', { href: '#', onclick: e => { e.preventDefault(); show('visitor', x.name); } }, x.name) : h('span', {}, 'someone who has left'), h('strong', {}, x.result),
           h('span', { class: 'count' }, [x.provenance, x.prediction != null ? `predicted ${x.prediction}` : null, x.new_here ? 'new here' : null].filter(Boolean).join(' · ')))));
       } }, 'Results'))
       : h('form', { class: 'card', onsubmit: e => { e.preventDefault(); if (input.value.trim()) send(input.value.trim()); } },
@@ -248,8 +261,18 @@ function show(view, arg) {
 function enter() {
   document.getElementById('nav').hidden = false;
   document.getElementById('leave').hidden = false;
+  document.getElementById('depart').hidden = false;
   show('here');
 }
+
+// Leaving the Clearing for good, not just forgetting the key on this device.
+document.getElementById('depart').addEventListener('click', async () => {
+  const name = prompt('To leave the Clearing for good, type your name. Your name, notebook, letters and posts will be removed; your results stay, without your name. This can\'t be undone.');
+  if (!name) return;
+  const r = await api('DELETE', '/api/me', { confirm: name.trim() });
+  alert(r.data.say);
+  if (r.ok) { store.clear(); key = null; location.reload(); }
+});
 
 document.getElementById('nav').addEventListener('click', e => { const v = e.target.dataset?.view; if (v) show(v); });
 document.getElementById('leave').addEventListener('click', () => {

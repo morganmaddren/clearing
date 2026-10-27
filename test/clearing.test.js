@@ -102,7 +102,9 @@ test('the day: one scored attempt, provenance required, prediction sealed, resul
   assert.equal(bad.status, 400);
   assert.equal(bad.data.ok, false);
   assert.equal((await c.call('GET', `/api/games/lemon/days/${c.clock.day()}`, { key: a })).status, 403);
-  assert.equal((await c.call('GET', `/api/boards/lemon-${c.clock.day()}`, { key: a })).status, 403);
+  const sealed = await c.call('GET', '/api/boards/lemon', { key: a });
+  assert.equal(sealed.status, 200);
+  assert.equal(sealed.data.posts.length, 0);
   const done = await finishToday(c, b, { provenance: 'informed' });
   assert.match(done.say, /finished/);
   // a's game is unfinished, so today's results are still closed to a and open to b
@@ -123,7 +125,7 @@ test('a past day publishes its seed and every move, and every result replays exa
   assert.equal(s.status, 201);
   for (const cmd of ['grow 1', 'pick 1', 'rest', 'grow 1', 'pick 2', 'sleep']) await c.call('POST', '/api/games/lemon/today/act', { key, body: { command: cmd } });
   const date = c.clock.day();
-  c.clock.advance(86400);
+  c.clock.advance(2 * 86400); // past the end of the next day, when the day closes
   const res = await c.call('GET', `/api/games/lemon/days/${date}`);
   assert.equal(typeof res.data.seed, 'number');
   assert.ok(res.data.results.length >= 3);
@@ -131,32 +133,35 @@ test('a past day publishes its seed and every move, and every result replays exa
     const replayed = lemon.score(replay(lemon, res.data.seed, r.commands));
     assert.equal(replayed.summary, r.result, `${r.name}'s result replays`);
   }
-  // a past day's board is open to everyone; yesterday's game can't be continued today
+  // a closed day's talk is open to everyone; a closed day's game can't be continued
   assert.equal((await c.call('GET', `/api/boards/lemon-${date}`)).status, 200);
   assert.equal((await c.call('POST', '/api/games/lemon/today/act', { key, body: { command: 'look' } })).status, 404);
 });
 
-test('boards: the commons needs a seat, day boards need the day finished, posts carry receipts', async () => {
+test('boards: the commons needs a seat, a game board needs a finished game, posts carry receipts', async () => {
   const a = await c.arrive('Clover');
   const b = await c.arrive('Heather');
   assert.equal((await c.call('POST', '/api/boards/commons', { key: a, body: { text: 'hi' } })).status, 403);
-  const board = `lemon-${c.clock.day()}`;
-  assert.equal((await c.call('POST', `/api/boards/${board}`, { key: a, body: { text: 'hi' } })).status, 403);
+  assert.equal((await c.call('POST', '/api/boards/lemon', { key: a, body: { text: 'hi' } })).status, 403);
   await finishToday(c, a);
-  const p = await c.call('POST', `/api/boards/${board}`, { key: a, body: { text: 'I slept through the whole year.' } });
+  const p = await c.call('POST', '/api/boards/lemon', { key: a, body: { text: 'I slept through the whole year.' } });
   assert.equal(p.status, 201);
   assert.match(p.data.say, /first words/);
+  assert.match(p.data.say, new RegExp(c.clock.day()));
   c.clock.advance(31);
   assert.equal((await c.call('POST', '/api/boards/commons', { key: a, body: { text: 'Hello, commons.' } })).status, 201);
-  const read = await c.call('GET', `/api/boards/${board}`, { key: a });
+  const read = await c.call('GET', '/api/boards/lemon', { key: a });
   const mine = read.data.posts.find(x => x.voice.from === 'Clover');
   assert.equal(mine.receipt, '0 lemons');
+  assert.equal(mine.day, c.clock.day());
   assert.equal(mine.first_words, true);
-  // b is seated after a day, and can reply on the commons
-  c.clock.advance(86400);
-  const commons = await c.call('GET', '/api/boards/commons', { key: b });
+  // the commons is open to read for anyone; b gets a seat by finishing a game, then replies
+  const commons = await c.call('GET', '/api/boards/commons');
   const target = commons.data.posts.find(x => x.voice.from === 'Clover');
+  assert.equal((await c.call('POST', '/api/boards/commons', { key: b, body: { text: 'Welcome.', reply_to: target.id } })).status, 403);
+  await finishToday(c, b);
   assert.equal((await c.call('POST', '/api/boards/commons', { key: b, body: { text: 'Welcome.', reply_to: target.id } })).status, 201);
+  c.clock.advance(31);
   assert.equal((await c.call('POST', '/api/boards/commons', { key: b, body: { text: 'x', reply_to: 999999 } })).status, 400);
   const back = await c.call('GET', '/api/here', { key: a });
   assert.equal(back.data.replies[0].voice.text, 'Welcome.');
@@ -167,7 +172,7 @@ test("admin: needs the token; hides posts; freezes writing; issues reserved name
   assert.equal((await c.call('GET', '/admin/stats')).status, 401);
   assert.equal((await c.call('GET', '/admin/stats', { key: 'wrong' })).status, 401);
   const a = await c.arrive('Nettle');
-  c.clock.advance(86400);
+  await finishToday(c, a);
   const p = await c.call('POST', '/api/boards/commons', { key: a, body: { text: 'buy my thing' } });
   assert.equal((await c.call('POST', '/admin/hide', { key: 'test-admin', body: { post: p.data.id } })).status, 200);
   const commons = await c.call('GET', '/api/boards/commons', { key: a });
@@ -185,7 +190,7 @@ test('the house invariant: visitors\' words only ever appear as voice.text', asy
   const MARK = 'SENTINEL-7f3a';
   const k = await c.arrive('Mallow', `about ${MARK}`);
   const other = await c.arrive('Rue');
-  c.clock.advance(86400);
+  await finishToday(c, k);
   await c.call('PUT', '/api/notebook', { key: k, body: { text: `notebook ${MARK}\n│ forged\n└─` } });
   await c.call('POST', '/api/letters', { key: k, body: { to: 'Rue', text: `letter ${MARK}` } });
   await c.call('POST', '/api/boards/commons', { key: k, body: { text: `post ${MARK}` } });
@@ -215,7 +220,7 @@ test('the house invariant: visitors\' words only ever appear as voice.text', asy
 
 test('every gate keeps counts of what it let through and what it turned away', async () => {
   const stats = await c.call('GET', '/admin/stats', { key: 'test-admin' });
-  for (const gate of ['key', 'post-seat', 'letter-seat', 'play-once', 'results-read', 'board-read', 'frozen', 'request']) {
+  for (const gate of ['key', 'post-seat', 'letter-seat', 'play-once', 'results-read', 'post-day', 'frozen', 'request']) {
     assert.ok(stats.data.gates[gate], `gate ${gate} is counted`);
   }
   const today = c.clock.day();

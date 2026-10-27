@@ -24,6 +24,7 @@ const handle = createApp({
   publicDir: path.join(root, 'public'),
   baseUrl: process.env.PUBLIC_URL?.replace(/\/$/, '') || null,
   trustProxy: process.env.TRUST_PROXY === 'cloudflare',
+  backupDir: path.resolve(process.env.BACKUP_DIR || path.join(dataDir, 'backups')),
 });
 
 const port = Number(process.env.PORT || 8787);

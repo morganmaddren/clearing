@@ -30,8 +30,10 @@ const ROUTES = [
   ['GET', '/api/here', visitors.here, { auth: true }],
   ['GET', '/api/notebook', visitors.readNotebook, { auth: true }],
   ['PUT', '/api/notebook', visitors.writeNotebook, { auth: true }],
+  ['POST', '/api/notebook', visitors.appendNotebook, { auth: true }],
   ['PUT', '/api/me', visitors.updateMe, { auth: true }],
-  ['GET', '/api/visitors/:name', visitors.profile],
+  ['DELETE', '/api/me', visitors.leave, { auth: true }],
+  ['GET', '/api/visitors/:name', visitors.profile, { auth: 'optional' }],
   ['GET', '/api/letters', talk.inbox, { auth: true }],
   ['GET', '/api/letters/sent', talk.sent, { auth: true }],
   ['POST', '/api/letters', talk.sendLetter, { auth: true }],
@@ -45,6 +47,7 @@ const ROUTES = [
   ['POST', '/api/games/:game/today/act', play.act, { auth: true }],
   ['GET', '/api/games/:game/days/:date', play.day, { auth: 'optional' }],
   ['GET', '/admin/stats', admin.stats, { admin: true }],
+  ['GET', '/admin/visitors', admin.visitors, { admin: true }],
   ['POST', '/admin/hide', admin.hide, { admin: true }],
   ['POST', '/admin/freeze', admin.freeze, { admin: true }],
   ['POST', '/admin/issue', admin.issue, { admin: true }],
@@ -54,10 +57,10 @@ const ROUTES = [
   return { method, re, names, handler, opts };
 });
 
-export function createApp({ db, clock = systemClock, secret, adminToken = null, publicDir, baseUrl = null, trustProxy = false }) {
+export function createApp({ db, clock = systemClock, secret, adminToken = null, publicDir, baseUrl = null, trustProxy = false, backupDir = null }) {
   if (!secret) throw new Error('createApp needs a secret');
   const gates = createGates(db, clock);
-  const ctx = { db, clock, gates, secret, games: GAMES, baseUrl, HttpError, dayStart };
+  const ctx = { db, clock, gates, secret, games: GAMES, baseUrl, HttpError, dayStart, backupDir };
   const findByKey = db.prepare('SELECT * FROM visitors WHERE key_hash = ?');
   const site = pages(ctx, publicDir);
   setInterval(() => gates.sweep(), 3600_000).unref();
@@ -88,7 +91,7 @@ export function createApp({ db, clock = systemClock, secret, adminToken = null, 
     try {
       if (req.method === 'OPTIONS') {
         res.writeHead(204, {
-          'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+          'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Clearing-Client', 'Access-Control-Max-Age': '86400',
         });
         return res.end();
@@ -132,7 +135,7 @@ export function createApp({ db, clock = systemClock, secret, adminToken = null, 
       if (wait) throw new HttpError(429, `Slow down: try again in ${wait} seconds. Nothing here is in a hurry.`, { retry_after: wait });
 
       let body = {};
-      if (req.method === 'POST' || req.method === 'PUT') body = await readJson(req);
+      if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') body = await readJson(req);
 
       const out = await route.handler({ ctx, req, params, query: url.searchParams, body, visitor, client, ip, ipHash, base });
       send(out.status || 200, out.body);
