@@ -30,11 +30,15 @@ const RULER = (() => {
   return ['      ' + labels, '      ' + ticks];
 })();
 const cell = v => (v ? '█' : '·');
+// Which card in the cycle grew each row: row 1 by the first, row 2 by the second, row 4 by the first
+// again. (Morgan, 2026-10-28: it was easy to start the cycle a row late.)
+const ORDINAL = ['1st', '2nd', '3rd'];
+const CYCLE_LABEL = y => `${ORDINAL[(y - 1) % E.CYCLE]} card`;
 const rowLine = (y, cells) => `   ${String(y).padStart(1)}  ${cells}`;
 
 function targetLines(state) {
   const lines = [...RULER, rowLine(0, '?'.repeat(E.WIDTH) + '   the hidden seed')];
-  for (let y = 1; y < E.HEIGHT; y++) lines.push(rowLine(y, state.target[y].map(cell).join('')));
+  for (let y = 1; y < E.HEIGHT; y++) lines.push(rowLine(y, state.target[y].map(cell).join('')) + `   ${CYCLE_LABEL(y)}`);
   return lines;
 }
 
@@ -57,7 +61,7 @@ export function view(state, { brief = false } = {}) {
   const out = [
     `KERNEL · grow the shape · ${state.grown ? 'grown' : isOver(state) ? 'the pouch is empty' : `${left} of ${E.POUCH} seeds left`}`,
     '',
-    '  the shape (rows 1-7; row 0 is the seed that grew it, hidden)',
+    '  the shape, and which card of your cycle grew each row',
     ...targetLines(state),
   ];
   if (!brief) {
