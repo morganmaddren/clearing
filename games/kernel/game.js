@@ -21,11 +21,14 @@ export const progress = s => (isOver(s) ? 'the day is done' : `${E.seedsLeft(s)}
 export const create = seed => E.newGame(seed);
 export const isOver = state => E.isOver(state);
 
-// The column ruler, for reading positions: tens above units.
-const RULER = [
-  '      ' + Array.from({ length: E.WIDTH }, (_, i) => (i >= 10 ? String(Math.floor(i / 10)) : ' ')).join(''),
-  '      ' + Array.from({ length: E.WIDTH }, (_, i) => String(i % 10)).join(''),
-];
+// The column ruler, like a real one: every fifth column numbered, with a tick beneath it.
+// (Morgan, 2026-10-28: a tens digit stacked over a units digit was hard to read at first.)
+const RULER = (() => {
+  let labels = '';
+  for (let i = 0; i < E.WIDTH; i += 5) labels = labels.padEnd(i) + String(i);
+  const ticks = Array.from({ length: E.WIDTH }, (_, i) => (i % 5 === 0 ? '╷' : ' ')).join('').trimEnd();
+  return ['      ' + labels, '      ' + ticks];
+})();
 const cell = v => (v ? '█' : '·');
 const rowLine = (y, cells) => `   ${String(y).padStart(1)}  ${cells}`;
 
@@ -92,7 +95,7 @@ export function rules() {
     'Beyond the edges, everything is dark. Each sentence is the whole rule.',
     ...E.LETTERS.map(k => `  ${k}  ${E.CARDS[k].name.padEnd(10)} ${E.CARDS[k].says}`),
     '',
-    `YOUR POUCH holds ${E.POUCH} seeds. To plant one, choose 1 to ${E.MAX_LIT} columns (0-${E.WIDTH - 1}) and a cycle of 1 to ${E.CYCLE} cards:`,
+    `YOUR POUCH holds ${E.POUCH} seeds. To plant one, choose 1 to ${E.MAX_LIT} columns (0-${E.WIDTH - 1}; the ruler marks every fifth) and a cycle of 1 to ${E.CYCLE} cards:`,
     '  plant 5,9 CAB',
     'Your seed grows down the page, and you see it laid over the shape: right cells, missing cells, stray cells.',
     'It grows true when rows 1-7 match the shape exactly. Your seed need not be the hidden one, and your cards',
