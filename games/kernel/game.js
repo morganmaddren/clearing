@@ -34,23 +34,40 @@ const cell = v => (v ? '█' : '·');
 // again. (Morgan, 2026-10-28: it was easy to start the cycle a row late.)
 const ORDINAL = ['1st', '2nd', '3rd'];
 const CYCLE_LABEL = y => `${ORDINAL[(y - 1) % E.CYCLE]} card`;
-const rowLine = (y, cells) => `   ${String(y).padStart(1)}  ${cells}`;
+// The grid sits in a frame. The frame is the garden wall: beyond it everything is dark, and the
+// cards read that darkness too.
+const rowLine = (y, cells, label = '') => `   ${y} │${cells}│${label ? `  ${label}` : ''}`;
+const TOP = `     ┌${'─'.repeat(E.WIDTH)}┐`;
+const BOTTOM = `     └${'─'.repeat(E.WIDTH)}┘`;
 
+// The shape. While the day is open its seed row is hidden; once it's over, the seed is revealed in place.
 function targetLines(state) {
-  const lines = [...RULER, rowLine(0, '?'.repeat(E.WIDTH) + '   the hidden seed')];
-  for (let y = 1; y < E.HEIGHT; y++) lines.push(rowLine(y, state.target[y].map(cell).join('')) + `   ${CYCLE_LABEL(y)}`);
-  return lines;
+  const seed = isOver(state)
+    ? rowLine(0, E.grow(state.solution.cols, state.solution.cards, 1)[0].map(cell).join(''), `seed, order ${state.solution.cards}`)
+    : rowLine(0, '?'.repeat(E.WIDTH), 'hidden seed');
+  const lines = [...RULER, TOP, seed];
+  for (let y = 1; y < E.HEIGHT; y++) lines.push(rowLine(y, state.target[y].map(cell).join(''), CYCLE_LABEL(y)));
+  return [...lines, BOTTOM];
 }
 
 // A grown try laid over the target: █ right, ○ missing (should be lit), × stray (should be dark).
 function overlayLines(state, t) {
-  const lines = [...RULER, rowLine(0, t.rows[0].map(cell).join('') + '   your seed')];
+  const lines = [...RULER, TOP, rowLine(0, t.rows[0].map(cell).join(''), 'your seed')];
   for (let y = 1; y < E.HEIGHT; y++) {
     lines.push(rowLine(y, t.rows[y].map((v, x) => {
       const want = state.target[y][x] === 1;
       return v && want ? '█' : want ? '○' : v ? '×' : '·';
     }).join('')));
   }
+  return [...lines, BOTTOM];
+}
+
+// Each card as a picture: the eight ways three cells above can be lit, and what grows beneath each.
+const PATTERNS = [7, 6, 5, 4, 3, 2, 1, 0];
+const patternGlyph = n => [4, 2, 1].map(b => (n & b ? '█' : '·')).join('');
+function cardPictures() {
+  const lines = [`  above   ${PATTERNS.map(patternGlyph).join(' ')}`];
+  for (const k of E.LETTERS) lines.push(`    ${k}     ${PATTERNS.map(n => ` ${(E.CARDS[k].rule >> n) & 1 ? '█' : '·'} `).join(' ')}`.trimEnd());
   return lines;
 }
 
@@ -79,7 +96,7 @@ export function view(state, { brief = false } = {}) {
   if (isOver(state)) {
     const r = score(state);
     out.push('', `  ${state.grown ? `It grew true. You kept ${r.kept} seed${r.kept === 1 ? '' : 's'}${r.medal !== 'none' ? `: ${r.medal}` : ''}.` : 'The pouch is empty, and the shape never grew true.'}`);
-    out.push(`  The hidden seed was ${state.solution.cols.join(',')} with ${state.solution.cards}.`);
+    out.push(`  The hidden seed was ${state.solution.cols.join(',')} with ${state.solution.cards}: it's drawn in row 0 above.`);
   } else {
     out.push('', `  Plant a seed: light 1 to ${E.MAX_LIT} cells of row 0 and name your cards, e.g. "plant 5,9 CAB".`);
   }
@@ -98,6 +115,10 @@ export function rules() {
     'THE CARDS. A cell is lit or dark according to the three cells above it (above-left, above, above-right).',
     'Beyond the edges, everything is dark. Each sentence is the whole rule.',
     ...E.LETTERS.map(k => `  ${k}  ${E.CARDS[k].name.padEnd(10)} ${E.CARDS[k].says}`),
+    '',
+    'The same cards as pictures: each column is one way the three cells above can be lit, and the',
+    'row beneath it shows whether that card lights the cell below.',
+    ...cardPictures(),
     '',
     `YOUR POUCH holds ${E.POUCH} seeds. To plant one, choose 1 to ${E.MAX_LIT} columns (0-${E.WIDTH - 1}; the ruler marks every fifth) and a cycle of 1 to ${E.CYCLE} cards:`,
     '  plant 5,9 CAB',

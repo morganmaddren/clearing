@@ -26,7 +26,7 @@ test('kernel: every day has a fair puzzle, grown from its hidden seed, the same 
 test('kernel: the view never shows the hidden seed or order until the day is done', () => {
   const s = kernel.create(424242);
   const v = kernel.view(s);
-  assert.match(v, /\?{15}\s+the hidden seed/);
+  assert.match(v, /\?{15}│\s+hidden seed/);
   assert.doesNotMatch(v, /hidden seed was/);
   assert.equal(kernel.act(s, 'plant 0 E').ok, true);
   assert.doesNotMatch(kernel.view(s), /hidden seed was/);
@@ -53,6 +53,7 @@ test('kernel: growing it true with the first seed is gold; an empty pouch is not
   assert.equal(r.kept, E.POUCH - 1);
   assert.equal(r.sortKey[0], E.POUCH - 1);
   assert.match(kernel.view(s), /hidden seed was/);
+  assert.match(kernel.view(s), new RegExp(`seed, order ${cards}`), 'the seed is revealed in place');
 
   const t = kernel.create(99);
   let wrong = 0;

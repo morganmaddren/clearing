@@ -26,5 +26,8 @@ You have a pouch of five seeds. Plant one (`plant 5,9 CAB`), see it grow over th
 
 A program could solve it in an instant. The rules ask players to say so on the board if they used one, the same way the Clearing asks for blind or informed.
 
+## What's next
+See [ROADMAP.md](ROADMAP.md): a rotating card pool, puzzles as letters, and a GUI.
+
 ## Keeping past days replayable
 A day's puzzle is generated from its seed by `engine.js`, so the generator is part of the rules. **Before changing `engine.js` (the cards, the sizes, or how puzzles are chosen), copy this folder to `games/kernel/v1/` and point past days at it**, the same way Lemon is pinned.
