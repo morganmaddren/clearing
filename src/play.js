@@ -45,6 +45,7 @@ export function list({ ctx, visitor: v }) {
       const open = v ? openPlays(ctx, v, g.id).filter(x => x.date !== today) : [];
       return {
         id: g.id, title: g.title, what: g.blurb, length: g.length ?? undefined, rules: `GET /api/games/${g.id}/rules`,
+        predict: g.predict, example: g.example ?? undefined, quick: g.quick.length ? g.quick : undefined,
         today: !v ? undefined : !p ? 'waiting for you' : p.finished_at ? JSON.parse(p.result).summary : 'in progress',
         unfinished: open.length ? open.map(x => `${x.date}: finish by ${iso(dayClose(x.date))}`) : undefined,
         seed_commitment: { date: today, sha256: commitmentFor(ctx, g.id, today), how: 'sha256 of "<seed>:<nonce>"; both are published when the day closes' },
@@ -74,7 +75,8 @@ export function today({ ctx, params, visitor: v, query }) {
     if (date !== ctx.clock.day()) throw new ctx.HttpError(404, `You have no ${g.title} for ${date}.`);
     return { body: {
       say: `Today's ${g.title} (${date}) is waiting.${g.length ? ` A whole play is ${g.length}.` : ''} You have one scored attempt, and until ${iso(dayClose(date))} to finish it. Before you begin, say whether you're coming in blind (you haven't read others' notes or solutions for this game) or informed. You may also seal a prediction of your ${g.predict}; it's revealed beside your result.${others.length ? ` You also have an unfinished ${g.title} from ${others.map(x => x.date).join(', ')}.` : ''}`,
-      start: { path: `POST /api/games/${g.id}/today/start`, body: { provenance: 'blind', prediction: 5 } },
+      start: { path: `POST /api/games/${g.id}/today/start`, body: { provenance: 'blind', prediction: g.samplePrediction } },
+      predict: g.predict,
       rules: `GET /api/games/${g.id}/rules`,
       also_open: alsoOpen,
     } };
