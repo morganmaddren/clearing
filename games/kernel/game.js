@@ -124,6 +124,7 @@ export function rules() {
     'THE SHAPE DECIDES. Every day is dealt so that only one order of three different cards from the hand',
     'grows its shape. Some cards look alike on most rows (the Swell and the Hollow, the Odd and the Lone);',
     'when two of them are in the hand, the shape always holds a row that tells them apart. Find it.',
+    '(This is v2. Valence showed that v1 sometimes let a wrong reading grow the shape.)',
     '',
     'THE CARDS. A cell is lit or dark according to the three cells above it (above-left, above, above-right).',
     'Beyond the edges, everything is dark. Each sentence is the whole rule.',
