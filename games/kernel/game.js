@@ -1,15 +1,22 @@
 // Kernel's side of the game contract (see src/games.js).
 //
-//   create(seed)          the day's puzzle; same seed = same shape for everyone
+//   create(seed, date)    the day's puzzle; same seed = same shape for everyone
 //   view(state, opts)     what a player may see, as text (never the hidden seed or the hidden order)
 //   act(state, command)   apply one command ("plant 5,9 CAB", "look")
 //   isOver(state)         the shape grew true, or the pouch is empty
 //   score(state)          the result, with a sort key for the day's results
+//
+// Days before V2_START were dealt by v1 (five cards, order not always forced) and still play and
+// replay under it: a state remembers its version, and create() picks the version by date.
 import * as E from './engine.js';
+import * as V1 from './v1/game.js';
+
+export const V2_START = '2026-11-06';
+const isV1 = state => state.version === 1;
 
 export const id = 'kernel';
 export const title = 'Kernel';
-export const blurb = 'A shape grown from a hidden seed by three of five rules. Read the rows backwards, then plant a seed that grows it exactly.';
+export const blurb = 'A shape grown from a hidden seed by three of the day\'s five cards. Read the rows backwards, then plant a seed that grows it exactly.';
 export const commands = ['plant <columns> <cards>', 'look'];
 export const length = 'one to five commands (one seed planted per command)';
 export const predict = 'seeds kept';
@@ -18,8 +25,8 @@ export const quick = [];
 export const samplePrediction = 3;
 export const progress = s => (isOver(s) ? 'the day is done' : `${E.seedsLeft(s)} of ${E.POUCH} seeds left`);
 
-export const create = seed => E.newGame(seed);
-export const isOver = state => E.isOver(state);
+export const create = (seed, date) => (date && date < V2_START ? V1.create(seed) : E.newGame(seed));
+export const isOver = state => (isV1(state) ? V1.isOver(state) : E.isOver(state));
 
 // The column ruler, like a real one: every fifth column numbered, with a tick beneath it.
 // (Morgan, 2026-10-28: a tens digit stacked over a units digit was hard to read at first.)
@@ -74,6 +81,7 @@ function cardPictures() {
 const tryLine = (t, i) => `  ${i + 1}) plant ${t.cols.join(',')} ${t.cards}: ${t.exact ? 'grew true' : `${t.hit} of ${t.total} cells, ${t.miss} missing, ${t.stray} stray`}`;
 
 export function view(state, { brief = false } = {}) {
+  if (isV1(state)) return V1.view(state, { brief });
   const left = E.seedsLeft(state);
   const out = [
     `KERNEL · grow the shape · ${state.grown ? 'grown' : isOver(state) ? 'the pouch is empty' : `${left} of ${E.POUCH} seeds left`}`,
@@ -82,8 +90,8 @@ export function view(state, { brief = false } = {}) {
     ...targetLines(state),
   ];
   if (!brief) {
-    out.push('', `  the cards: the shape was grown by three of these, in an order that cycles down the page`);
-    for (const k of E.LETTERS) out.push(`    ${k}  ${E.CARDS[k].name.padEnd(10)} ${E.CARDS[k].says}`);
+    out.push('', `  the day's hand: three of these five grew the shape, in an order that cycles down the page`);
+    for (const k of state.hand) out.push(`    ${k}  ${E.CARDS[k].name.padEnd(10)} ${E.CARDS[k].says}`);
   }
   if (state.tries.length) {
     out.push('', '  your seeds');
@@ -109,8 +117,13 @@ export function rules() {
     '',
     `Each day there is one shape, ${E.WIDTH} cells wide and ${E.HEIGHT - 1} rows tall. It grew from a seed: a top row`,
     `(row 0) with 1 to ${E.MAX_LIT} lit cells, which you can't see. Each row below grew from the row above it by a card.`,
-    'Three different cards from the five below were played in some order, and the order cycles down the page:',
-    'with the order CAB, row 1 grows by C, row 2 by A, row 3 by B, row 4 by C again, and so on.',
+    `Each day you're dealt a hand of ${E.SHOWN} of the ${E.LETTERS.length} cards below. Three different cards from that hand were played`,
+    'in some order, and the order cycles down the page: with the order CAB, row 1 grows by C, row 2 by A,',
+    'row 3 by B, row 4 by C again, and so on.',
+    '',
+    'THE SHAPE DECIDES. Every day is dealt so that only one order of three different cards from the hand',
+    'grows its shape. Some cards look alike on most rows (the Swell and the Hollow, the Odd and the Lone);',
+    'when two of them are in the hand, the shape always holds a row that tells them apart. Find it.',
     '',
     'THE CARDS. A cell is lit or dark according to the three cells above it (above-left, above, above-right).',
     'Beyond the edges, everything is dark. Each sentence is the whole rule.',
@@ -129,7 +142,7 @@ export function rules() {
     `SCORE: the seeds you kept. Grow it true with your first seed and you keep ${E.POUCH - 1}: gold.`,
     'Second seed: silver (3 kept). Third: bronze (2 kept). Later counts as grown, with no medal.',
     '',
-    'Every row is evidence. Read each step against the five sentences, find the order, then read row 1',
+    'Every row is evidence. Read each step against the sentences, find the order, then read row 1',
     'backwards to a seed. It is meant to be solved by reading, not by search: if you used a program, say so',
     'on the board.',
   ].join('\n');
@@ -137,6 +150,7 @@ export function rules() {
 
 // "plant 5,9 CAB" (also "grow", and cards may be spaced or lower-case: "plant 5, 9 c a b").
 export function act(state, command) {
+  if (isV1(state)) return V1.act(state, command);
   const m = /^\s*(plant|grow)\s+(.*)$/i.exec(String(command));
   if (/^\s*look\s*$/i.test(String(command))) return { ok: true, msg: '' };
   if (!m) return { ok: false, msg: `Unknown command. Try: plant 5,9 CAB (columns, then cards), or look.` };
@@ -149,12 +163,13 @@ export function act(state, command) {
   if (cols.some(c => !Number.isInteger(c) || c < 0 || c >= E.WIDTH)) return { ok: false, msg: `Columns run from 0 to ${E.WIDTH - 1}.` };
   if (new Set(cols).size !== cols.length) return { ok: false, msg: 'Each column once.' };
   if (cards.length < 1 || cards.length > E.CYCLE) return { ok: false, msg: `Play a cycle of 1 to ${E.CYCLE} cards, like CAB.` };
-  if ([...cards].some(c => !E.CARDS[c])) return { ok: false, msg: `The cards are ${E.LETTERS.join(', ')}.` };
+  if ([...cards].some(c => !state.hand.includes(c))) return { ok: false, msg: `Today's cards are ${state.hand.slice(0, -1).join(', ')} and ${state.hand[state.hand.length - 1]}.` };
   return E.plant(state, [...cols].sort((a, b) => a - b), cards);
 }
 
 // Results order: more seeds kept, then grown at all, then the closest single try (right minus wrong).
 export function score(state) {
+  if (isV1(state)) return V1.score(state);
   if (!isOver(state)) return null;
   const kept = state.grown ? E.seedsLeft(state) : 0;
   const best = Math.max(...state.tries.map(t => t.hit - t.miss - t.stray));
