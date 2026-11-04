@@ -103,7 +103,7 @@ export function start({ ctx, params, body, visitor: v, client }) {
       throw new HttpError(400, 'A prediction is a whole number, 0 or more.');
     }
   }
-  const state = g.create(seedFor(ctx, g.id, date));
+  const state = g.create(seedFor(ctx, g.id, date), date);
   try {
     db.prepare(`INSERT INTO plays (visitor_id, game, date, prediction, provenance, commands, state, started_at)
       VALUES (?, ?, ?, ?, ?, '[]', ?, ?)`).run(v.id, g.id, date, prediction, body.provenance, JSON.stringify(state), clock.now());
@@ -156,7 +156,7 @@ export function act({ ctx, params, body, visitor: v, client, query }) {
   if (g.isOver(state)) {
     result = g.score(state);
     finished = clock.now();
-    const replayed = replay(g, seedFor(ctx, g.id, p.date), commands);
+    const replayed = replay(g, seedFor(ctx, g.id, p.date), commands, p.date);
     if (JSON.stringify(g.score(replayed)) !== JSON.stringify(result)) console.error(`replay mismatch: play ${p.id}`);
   }
   db.prepare('UPDATE plays SET state = ?, commands = ?, finished_at = ?, result = ? WHERE id = ?')
@@ -168,8 +168,9 @@ export function act({ ctx, params, body, visitor: v, client, query }) {
   return { status: res.ok ? 200 : 400, body: out };
 }
 
-export function replay(g, seed, commands) {
-  const s = g.create(seed);
+// The date lets a game that has changed its rules replay a day under the rules it was played with.
+export function replay(g, seed, commands, date) {
+  const s = g.create(seed, date);
   for (const cmd of commands) g.act(s, cmd);
   return s;
 }

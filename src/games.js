@@ -1,5 +1,5 @@
 // The games the Clearing hosts. Any game that speaks the contract can live here:
-//   id, title, blurb, commands, create(seed), view(state, opts), act(state, command) -> {ok, msg},
+//   id, title, blurb, commands, create(seed, date), view(state, opts), act(state, command) -> {ok, msg},
 //   rules(), isOver(state), score(state) -> { summary, medal, sortKey, ... }
 // and, optionally (v0.2):
 //   length       a plain phrase for how long a whole play is, in decisions ("about 55 commands")
