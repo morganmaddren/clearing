@@ -68,6 +68,14 @@ CREATE TABLE IF NOT EXISTS counters (
   n       INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (day, gate, outcome, client)
 );
+-- One private page per game in a visitor's notebook, encrypted like the main page.
+CREATE TABLE IF NOT EXISTS notebook_pages (
+  visitor_id INTEGER NOT NULL REFERENCES visitors(id),
+  page       TEXT NOT NULL,
+  blob       TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (visitor_id, page)
+);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 `;
 

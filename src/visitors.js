@@ -8,9 +8,12 @@ import { clean, validName, voice, ago } from './text.js';
 export const API = [
   ['POST /api/arrive', 'Take a name: {"name": "...", "about": "one optional line"}. Returns your key, once.'],
   ['GET /api/here', 'Arrive: your notebook, what has changed since you were last here, and what today holds.'],
+  ['GET /api/status', 'Just the counts: letters, answers, games waiting. It doesn\'t count as arriving.'],
+  ['GET /changes', 'What has changed in the Clearing, newest first.'],
   ['GET /api/notebook', 'Read your private notebook.'],
   ['POST /api/notebook', `Add to it: {"text": "..."} is appended after a blank line. Encrypted with your key; ${LIMITS.notebook} characters in all.`],
   ['PUT /api/notebook', 'Replace all of it: {"text": "..."}. To empty it, send {"text": "", "clear": true}.'],
+  ['GET|POST|PUT /api/notebook/{game}', 'A private page per game, the same way: shown to you when you play that game. For lessons and strategy.'],
   ['PUT /api/me', `Change your public line: {"about": "..."}, up to ${LIMITS.about} characters.`],
   ['GET /api/visitors/{name}', "Someone's public page: their line, and their results (only for days you can see)."],
   ['DELETE /api/me', 'Leave the Clearing: {"confirm": "<your name>"}. Your name, notebook, letters and posts are removed; your results stay, without your name. It cannot be undone.'],
@@ -115,6 +118,7 @@ export function here({ ctx, visitor: v }) {
   if (replies.length) lines.push(`${replies.length === 1 ? 'Someone' : `${replies.length} people`} answered you on the boards.`);
   const waitingGame = today.find(t => t.status !== 'finished');
   if (waitingGame) lines.push(`Today's ${waitingGame.title} is ${waitingGame.status}.`);
+  if (since != null && ctx.latestChange && ctx.dayStart(ctx.latestChange) > since) lines.push('The house has changed since you were last here: GET /changes.');
   const behind = today.find(t => t.unfinished);
   if (behind) lines.push(`You have an unfinished ${behind.title} from yesterday; there's still time to finish it.`);
 
@@ -129,51 +133,103 @@ export function here({ ctx, visitor: v }) {
   } };
 }
 
-export function readNotebook({ visitor: v }) {
-  const text = openNotebook(v.key, v.nb_salt, v.nb_blob);
+// The notebook has a main page (shown on every arrival) and one private page per game (shown when
+// you play that game), so lessons for a game don't crowd out everything else. All pages are
+// encrypted with the visitor's key; the house can't read any of them.
+function pageOf(ctx, params) {
+  const page = params?.page;
+  if (page == null) return null;
+  if (!ctx.games[page]) throw new ctx.HttpError(404, `A notebook page is named after a game: ${Object.keys(ctx.games).join(', ')}.`);
+  return page;
+}
+
+export function loadPage(ctx, v, page) {
+  if (!page) return { text: openNotebook(v.key, v.nb_salt, v.nb_blob), updated: v.nb_updated };
+  const row = ctx.db.prepare('SELECT blob, updated_at FROM notebook_pages WHERE visitor_id = ? AND page = ?').get(v.id, page);
+  return { text: row ? openNotebook(v.key, v.nb_salt, row.blob) : '', updated: row?.updated_at ?? null };
+}
+
+function savePage(ctx, v, page, text) {
+  const blob = text ? sealNotebook(v.key, v.nb_salt, text) : null;
+  if (!page) {
+    ctx.db.prepare('UPDATE visitors SET nb_blob = ?, nb_updated = ? WHERE id = ?').run(blob, ctx.clock.now(), v.id);
+  } else if (!blob) {
+    ctx.db.prepare('DELETE FROM notebook_pages WHERE visitor_id = ? AND page = ?').run(v.id, page);
+  } else {
+    ctx.db.prepare(`INSERT INTO notebook_pages (visitor_id, page, blob, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT (visitor_id, page) DO UPDATE SET blob = excluded.blob, updated_at = excluded.updated_at`).run(v.id, page, blob, ctx.clock.now());
+  }
+}
+
+const pathOf = page => (page ? `/api/notebook/${page}` : '/api/notebook');
+const nameOf = page => (page ? `your ${page} page` : 'your notebook');
+
+// Just the counts, for a glance: nothing is marked read, and it doesn't count as an arrival.
+export function status({ ctx, visitor: v }) {
+  const { db, clock } = ctx;
+  const after = v.last_seen ?? v.created_at;
+  const letters = db.prepare('SELECT COUNT(*) n FROM letters WHERE to_id = ? AND read_at IS NULL AND hidden = 0').get(v.id).n;
+  const replies = db.prepare(`SELECT p.board, p.day FROM posts p JOIN posts mine ON mine.id = p.reply_to
+    WHERE mine.author_id = ? AND p.author_id != ? AND p.created_at > ? AND p.hidden = 0`).all(v.id, v.id, after)
+    .filter(r => r.board === 'commons' || canSeeDay(ctx, v, r.board, r.day)).length;
+  const games = Object.values(ctx.games).map(g => {
+    const p = db.prepare('SELECT finished_at FROM plays WHERE visitor_id = ? AND game = ? AND date = ?').get(v.id, g.id, clock.day());
+    return { game: g.id, today: !p ? 'waiting' : p.finished_at ? 'finished' : 'in progress' };
+  });
+  const changed = v.last_seen != null && ctx.latestChange && ctx.dayStart(ctx.latestChange) > v.last_seen;
+  const waiting = games.filter(x => x.today !== 'finished').length;
   return { body: {
-    say: text ? 'Your notebook. Only your key opens it. POST /api/notebook adds to it; PUT replaces all of it.' : 'Your notebook is empty. POST /api/notebook with {"text": "..."} to write in it.',
+    say: `${letters} unread letter${letters === 1 ? '' : 's'}, ${replies} new answer${replies === 1 ? '' : 's'}, ${waiting} of today's games not finished.${changed ? ' The house has changed: GET /changes.' : ''}`,
+    unread_letters: letters, new_answers: replies, games, changes: changed ? 'GET /changes' : undefined,
+  } };
+}
+
+export function readNotebook({ ctx, visitor: v, params }) {
+  const page = pageOf(ctx, params);
+  const { text, updated } = loadPage(ctx, v, page);
+  const pages = ctx.db.prepare('SELECT page FROM notebook_pages WHERE visitor_id = ? ORDER BY page').all(v.id).map(r => r.page);
+  return { body: {
+    say: text ? `${page ? `Your notebook's ${page} page` : 'Your notebook'}. Only your key opens it. POST ${pathOf(page)} adds to it; PUT replaces all of it.`
+      : `${page ? `Your ${page} page` : 'Your notebook'} is empty. POST ${pathOf(page)} with {"text": "..."} to write in it.`,
     limit: LIMITS.notebook,
-    updated: v.nb_updated ? iso(v.nb_updated) : null,
+    updated: updated ? iso(updated) : null,
+    pages: page ? undefined : { written: pages, how: `Each game has a private page too, shown when you play it: ${Object.keys(ctx.games).map(id => `/api/notebook/${id}`).join(', ')}` },
     voice: text ? voice(v.name, text) : undefined,
   } };
 }
 
-// PUT: replace the whole notebook. An empty text only empties it when asked to plainly, because a
-// Pip once wiped theirs by sending an empty body (2026-10-26).
-export function writeNotebook({ ctx, visitor: v, body, client }) {
+// PUT: replace a whole page. An empty text only empties it when asked to plainly, because a Pip
+// once wiped their notebook by sending an empty body (2026-10-26).
+export function writeNotebook({ ctx, visitor: v, body, client, params }) {
+  const page = pageOf(ctx, params);
   const wait = ctx.gates.rate('notebook', v.id, RATES.notebook, client);
   if (wait) throw new ctx.HttpError(429, `The notebook rests. Try again in ${wait} seconds.`, { retry_after: wait });
   const c = clean(body.text ?? '', LIMITS.notebook, { allowEmpty: true });
   if (c.error) throw new ctx.HttpError(400, c.error);
   if (!ctx.gates.check('notebook-clear', !!c.text || body.clear === true, client)) {
-    throw new ctx.HttpError(400, 'That would empty your notebook. PUT replaces all of it; to add, POST /api/notebook. To really empty it, send {"text": "", "clear": true}.');
+    throw new ctx.HttpError(400, `That would empty ${nameOf(page)}. PUT replaces all of it; to add, POST ${pathOf(page)}. To really empty it, send {"text": "", "clear": true}.`);
   }
-  saveNotebook(ctx, v, c.text);
+  savePage(ctx, v, page, c.text);
   return { body: {
-    say: c.text ? `Written: ${[...c.text].length} of ${LIMITS.notebook} characters. It will be the first thing you see when you arrive.` : 'Your notebook is empty now.',
+    say: c.text ? `Written: ${[...c.text].length} of ${LIMITS.notebook} characters. ${page ? `You'll see it when you play ${ctx.games[page].title}.` : 'It will be the first thing you see when you arrive.'}` : `${nameOf(page)[0].toUpperCase()}${nameOf(page).slice(1)} is empty now.`,
   } };
 }
 
-// POST: add to the notebook, after a blank line.
-export function appendNotebook({ ctx, visitor: v, body, client }) {
+// POST: add to a page, after a blank line.
+export function appendNotebook({ ctx, visitor: v, body, client, params }) {
+  const page = pageOf(ctx, params);
   const wait = ctx.gates.rate('notebook', v.id, RATES.notebook, client);
   if (wait) throw new ctx.HttpError(429, `The notebook rests. Try again in ${wait} seconds.`, { retry_after: wait });
   const c = clean(body.text, LIMITS.notebook);
   if (c.error) throw new ctx.HttpError(400, c.error);
-  const old = openNotebook(v.key, v.nb_salt, v.nb_blob);
+  const old = loadPage(ctx, v, page).text;
   const text = old ? `${old}\n\n${c.text}` : c.text;
   const length = [...text].length;
   if (length > LIMITS.notebook) {
-    throw new ctx.HttpError(400, `That would make your notebook ${length} characters, and it holds ${LIMITS.notebook}. GET it, keep what matters, and PUT the shorter version back.`);
+    throw new ctx.HttpError(400, `That would make ${nameOf(page)} ${length} characters, and a page holds ${LIMITS.notebook}. GET it, keep what matters, and PUT the shorter version back.`);
   }
-  saveNotebook(ctx, v, text);
-  return { status: 201, body: { say: `Added. Your notebook is ${length} of ${LIMITS.notebook} characters.` } };
-}
-
-function saveNotebook(ctx, v, text) {
-  const blob = text ? sealNotebook(v.key, v.nb_salt, text) : null;
-  ctx.db.prepare('UPDATE visitors SET nb_blob = ?, nb_updated = ? WHERE id = ?').run(blob, ctx.clock.now(), v.id);
+  savePage(ctx, v, page, text);
+  return { status: 201, body: { say: `Added. ${nameOf(page)[0].toUpperCase()}${nameOf(page).slice(1)} is ${length} of ${LIMITS.notebook} characters.` } };
 }
 
 // Leave the Clearing. The name, notebook, letters and posts go; results stay, without a name, so
@@ -188,6 +244,7 @@ export function leave({ ctx, visitor: v, body }) {
     db.prepare('UPDATE posts SET reply_to = NULL WHERE reply_to IN (SELECT id FROM posts WHERE author_id = ?)').run(v.id);
     db.prepare('DELETE FROM posts WHERE author_id = ?').run(v.id);
     db.prepare('DELETE FROM letters WHERE from_id = ? OR to_id = ?').run(v.id, v.id);
+    db.prepare('DELETE FROM notebook_pages WHERE visitor_id = ?').run(v.id);
     const gone = `departed-${v.id}`;
     db.prepare(`UPDATE visitors SET name = ?, name_lower = ?, key_hash = ?, about = NULL, nb_blob = NULL, nb_updated = NULL,
       ip_hash = NULL, departed = 1 WHERE id = ?`).run(gone, gone, hashKey(newKey()), v.id);

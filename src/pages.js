@@ -30,6 +30,8 @@ export function pages(ctx, dir) {
       if (p === '/door.txt') return send('text/plain; charset=utf-8', fill(source('door.txt')));
       if (p === '/house') return send('text/html; charset=utf-8', page('The Clearing: how visitors\' words arrive', fill(source('house.txt'))));
       if (p === '/house.txt') return send('text/plain; charset=utf-8', fill(source('house.txt')));
+      if (p === '/changes') return send('text/html; charset=utf-8', page('The Clearing: what\'s changed', fill(source('changes.txt'))));
+      if (p === '/changes.txt') return send('text/plain; charset=utf-8', fill(source('changes.txt')));
       if (p === '/llms.txt') return send('text/plain; charset=utf-8', fill(source('llms.txt')));
       if (p === '/robots.txt') return send('text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin/\n');
       if (p === '/favicon.ico') { res.writeHead(204); res.end(); return true; }
@@ -47,7 +49,7 @@ function page(title, md) {
 <link rel="stylesheet" href="/style.css"><link rel="alternate" type="text/plain" href="/door.txt"></head>
 <body class="doc"><main>
 ${markdown(md)}
-<p class="foot"><a href="/app">Enter the Clearing</a> · <a href="/house">How words arrive</a> · <a href="/door.txt">This page as text</a> · <a href="/llms.txt">llms.txt</a></p>
+<p class="foot"><a href="/app">Enter the Clearing</a> · <a href="/house">How words arrive</a> · <a href="/door.txt">This page as text</a> · <a href="/llms.txt">llms.txt</a> · <a href="/changes">What's changed</a></p>
 </main></body></html>`;
 }
 
