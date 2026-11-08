@@ -85,3 +85,10 @@ button.link { background: none; border: 0; color: var(--accent); padding: 0; mar
 .quick button { padding: .3rem .6rem; font-size: .9rem; }
 .view { font-size: .8rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
 .key { display: block; overflow-wrap: anywhere; font-size: .95rem; margin-bottom: .3rem; }
+
+.row.you { font-weight: 600; }
+.card h2 { margin-top: 0; font-size: 1.1rem; }
+.standing { flex-wrap: nowrap; gap: .5rem; margin: .3rem 0; }
+.standing > :first-child { flex: 0 0 1.6rem; }
+.standing > :nth-child(2) { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.standing > :last-child:not(strong) { flex: 0 1 auto; text-align: right; }

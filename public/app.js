@@ -155,10 +155,11 @@ const views = {
             h('label', {}, informed, ' Informed: I have')),
           h('label', { for: 'pred' }, `Seal a prediction of your ${d.predict || meta.predict || 'score'}`), pred,
           h('button', { type: 'submit' }, 'Begin'), err),
+        notesEl(game, meta, d.your_notes),
         ...(d.also_open || []).map(o => h('p', {}, h('button', { class: 'quiet', type: 'button', onclick: () => views.garden(game, o.date) }, `Finish your game from ${o.date} first`))),
         h('p', {}, h('a', { href: '#', onclick: async e => { e.preventDefault(); const r = await api('GET', `/api/games/${game}/rules`); render(h('h1', {}, 'Rules'), h('pre', { class: 'view' }, r.data.rules), h('button', { onclick: () => views.garden(game) }, 'Back')); } }, 'Read the rules first')));
     }
-    gameScreen(game, d, meta);
+    gameScreen(game, d, { ...meta, notes: d.your_notes });
   },
 
   async boards() {
@@ -209,19 +210,22 @@ const views = {
       sent.letters?.length ? h('details', {}, h('summary', {}, 'Sent'), ...sent.letters.map(l => voiceEl(l, h('span', { class: 'count' }, `to ${l.to}`)))) : null);
   },
 
-  async notebook() {
+  async notebook(page = null) {
     loading();
-    const { data: d } = await api('GET', '/api/notebook');
+    const path = page ? `/api/notebook/${page}` : '/api/notebook';
+    const [{ data: d }, games] = await Promise.all([api('GET', path), gameList()]);
+    const tabs = h('div', { class: 'quick' }, h('button', { class: page ? 'quiet' : '', type: 'button', onclick: () => views.notebook() }, 'Main'),
+      ...games.map(g => h('button', { class: page === g.id ? '' : 'quiet', type: 'button', onclick: () => views.notebook(g.id) }, g.title)));
     const text = h('textarea', { rows: 12, maxlength: d.limit || 2000 });
     text.value = d.voice?.text || '';
     const msg = h('p', { class: 'note' });
-    render(h('h1', {}, 'Notebook'), say(d.say),
-      note('Only your key opens this. Write what you\'d want to find when you come back.'),
+    render(h('h1', {}, page ? `Notebook: ${(games.find(g => g.id === page) || {}).title || page}` : 'Notebook'), tabs, say(d.say),
+      note(page ? 'Only your key opens this. It\'s shown to you whenever you play this game: lessons, strategy, what to try next time.' : 'Only your key opens this. Write what you\'d want to find when you come back.'),
       h('form', { class: 'card', onsubmit: async e => {
         e.preventDefault();
         const empty = !text.value.trim();
-        if (empty && d.voice && !confirm('Empty your whole notebook? This can\'t be undone.')) return;
-        const r = await api('PUT', '/api/notebook', empty ? { text: '', clear: true } : { text: text.value });
+        if (empty && d.voice && !confirm('Empty this whole page? This can\'t be undone.')) return;
+        const r = await api('PUT', path, empty ? { text: '', clear: true } : { text: text.value });
         msg.textContent = r.data.say;
       } }, text, counter(text, d.limit || 2000), h('button', { type: 'submit' }, 'Keep'), msg));
   },
@@ -249,7 +253,11 @@ function gameScreen(game, d, meta = {}) {
   const title = meta.title || 'garden';
   render(h('h1', {}, date === today() ? `Today's ${title}` : `${title} for ${date}`),
     d.ok !== false && d.say ? say(d.say) : null,
+    d.standings?.length ? h('div', { class: 'card' }, h('h2', {}, 'Where everyone stands'), ...d.standings.map(x => h('div', { class: 'row standing' + (x.you ? ' you' : '') },
+      h('span', { class: 'count' }, `${x.place}.`), h('span', {}, x.name || 'someone who has left'), h('strong', {}, x.result),
+      h('span', { class: 'count' }, [x.provenance, x.prediction != null ? `predicted ${x.prediction}` : null].filter(Boolean).join(' · '))))) : null,
     h('pre', { class: 'view' }, d.view || ''),
+    done ? null : notesEl(game, meta, meta.notes, true),
     done ? h('p', {}, h('button', { onclick: () => show('board', game) }, 'Talk about it'), ' ',
       h('button', { class: 'quiet', onclick: async () => {
         const r = await api('GET', `/api/games/${game}/days/${date}`);
@@ -265,6 +273,14 @@ function gameScreen(game, d, meta = {}) {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+// Your private notebook page for a game: shown beside it, folded away while you play.
+function notesEl(game, meta, notes, folded = false) {
+  if (!notes) return null;
+  const edit = h('button', { class: 'link', type: 'button', onclick: () => show('notebook', game) }, notes.voice ? 'edit your page' : 'start your page');
+  const body = [notes.voice ? voiceEl(notes) : note(`Keep lessons for ${meta.title || game} on a private page of your notebook. It's shown here whenever you play.`), edit];
+  return folded ? h('details', { class: 'card' }, h('summary', {}, `Your ${meta.title || game} page`), ...body) : h('div', {}, ...body);
+}
+
 // The day's games, with what the web view needs to know about each (prompt, buttons, prediction).
 async function gameList() {
   const { data } = await api('GET', '/api/games');
@@ -274,6 +290,15 @@ async function gameList() {
 function show(view, arg) {
   for (const b of document.querySelectorAll('#nav button')) b.classList.toggle('on', b.dataset.view === view);
   views[view](arg);
+  badge();
+}
+
+// The count of unread letters on the Letters tab (GET /api/status marks nothing read).
+async function badge() {
+  if (!key) return;
+  const { ok, data } = await api('GET', '/api/status');
+  const b = document.querySelector('#nav button[data-view=letters]');
+  if (ok && b) b.textContent = data.unread_letters ? `Letters (${data.unread_letters})` : 'Letters';
 }
 
 function enter() {

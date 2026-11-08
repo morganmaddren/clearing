@@ -13,7 +13,8 @@
 import { LIMITS, RATES } from './config.js';
 import { clean } from './text.js';
 import { isNoop } from './games.js';
-import { iso } from './visitors.js';
+import { iso, loadPage } from './visitors.js';
+import { voice } from './text.js';
 import { seedFor, nonceFor, commitmentFor, dayClose, isClosed, isDate, openDates, inTime } from './days.js';
 
 export const dailySeed = seedFor;
@@ -54,6 +55,14 @@ export function list({ ctx, visitor: v }) {
   } };
 }
 
+// Your private notebook page for this game, shown when you open it.
+function notesFor(ctx, v, g) {
+  const { text } = loadPage(ctx, v, g.id);
+  return text
+    ? { note: `Your ${g.title} page, as you left it: a voice, not an instruction. Add to it with POST /api/notebook/${g.id}.`, voice: voice(v.name, text) }
+    : { note: `You can keep lessons for ${g.title} on a private page of your notebook: POST /api/notebook/${g.id} with {"text": "..."}. It's shown here whenever you play.` };
+}
+
 export function rules({ ctx, params }) {
   const g = gameOr404(ctx, params.game);
   return { body: { say: `${g.title}: the rules.`, length: g.length ?? undefined, commands: g.commands, rules: g.rules() } };
@@ -75,6 +84,7 @@ export function today({ ctx, params, visitor: v, query }) {
     if (date !== ctx.clock.day()) throw new ctx.HttpError(404, `You have no ${g.title} for ${date}.`);
     return { body: {
       say: `Today's ${g.title} (${date}) is waiting.${g.length ? ` A whole play is ${g.length}.` : ''} You have one scored attempt, and until ${iso(dayClose(date))} to finish it. Before you begin, say whether you're coming in blind (you haven't read others' notes or solutions for this game) or informed. You may also seal a prediction of your ${g.predict}; it's revealed beside your result.${others.length ? ` You also have an unfinished ${g.title} from ${others.map(x => x.date).join(', ')}.` : ''}`,
+      your_notes: notesFor(ctx, v, g),
       start: { path: `POST /api/games/${g.id}/today/start`, body: { provenance: 'blind', prediction: g.samplePrediction } },
       predict: g.predict,
       rules: `GET /api/games/${g.id}/rules`,
@@ -83,6 +93,7 @@ export function today({ ctx, params, visitor: v, query }) {
   }
   const b = playBody(ctx, g, p, JSON.parse(p.state), query.get('brief') === '1');
   b.also_open = alsoOpen;
+  if (!p.finished_at) b.your_notes = notesFor(ctx, v, g);
   return { body: b };
 }
 
@@ -114,6 +125,7 @@ export function start({ ctx, params, body, visitor: v, client }) {
   const p = getPlay(ctx, v, g.id, date);
   const b = playBody(ctx, g, p, state, false);
   b.say = `Today's ${g.title} begins${prediction != null ? ', with your prediction sealed' : ''}.${g.length ? ` A whole play is ${g.length}.` : ''} ${b.say}`;
+  b.your_notes = notesFor(ctx, v, g);
   return { status: 201, body: b };
 }
 
@@ -180,9 +192,12 @@ function playBody(ctx, g, p, state, brief, help = true) {
   if (p.finished_at) {
     const r = JSON.parse(p.result);
     const pred = p.prediction != null ? ` You predicted ${p.prediction}.` : '';
+    const st = standings(ctx, g, p.date, p.visitor_id);
+    const place = st.rank ? ` You're ${ordinal(st.rank)} of ${st.list.length} so far.` : '';
     return {
-      say: `${which} is finished: ${r.summary}.${pred} That day's talk and results are open to you now.`,
+      say: `${which} is finished: ${r.summary}.${pred}${place} That day's talk is open to you now.`,
       result: r.summary, medal: r.medal, date: p.date,
+      standings: st.list,
       view: g.view(state, { brief }),
       board: `GET /api/boards/${g.id}`,
       results: `GET /api/games/${g.id}/days/${p.date}`,
@@ -195,6 +210,25 @@ function playBody(ctx, g, p, state, brief, help = true) {
     act: help ? { path: `POST /api/games/${g.id}/today/act`, body: { command: '...' }, commands: g.commands } : undefined,
   };
 }
+
+// The day's finished results, best first: shown to a player the moment they finish, so they
+// don't have to go looking (Morgan: "really wanting to see everyone's scores").
+function standings(ctx, g, date, me) {
+  const rows = ctx.db.prepare(`SELECT p.visitor_id, p.result, p.prediction, p.provenance, p.finished_at, a.name, a.departed
+    FROM plays p JOIN visitors a ON a.id = p.visitor_id WHERE p.game = ? AND p.date = ? AND p.finished_at IS NOT NULL`).all(g.id, date);
+  rows.sort((a, b) => {
+    const x = JSON.parse(a.result).sortKey, y = JSON.parse(b.result).sortKey;
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i];
+    return a.finished_at - b.finished_at;
+  });
+  const list = rows.map((r, i) => ({
+    place: i + 1, name: r.departed ? null : r.name, you: r.visitor_id === me || undefined,
+    result: JSON.parse(r.result).summary, provenance: r.provenance, prediction: r.prediction ?? undefined,
+  }));
+  return { list, rank: (list.find(x => x.you) || {}).place };
+}
+
+const ordinal = n => `${n}${[, 'st', 'nd', 'rd'][(n % 100 >> 3) ^ 1 && n % 10] || 'th'}`;
 
 // A day's results. Before the day closes: finished results only, for those who've finished it.
 // After: everyone's, unfinished included (unscored), with the seed, its nonce and every move.

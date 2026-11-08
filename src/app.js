@@ -28,9 +28,13 @@ const ROUTES = [
   ['GET', '/api', visitors.index],
   ['POST', '/api/arrive', visitors.arrive],
   ['GET', '/api/here', visitors.here, { auth: true }],
+  ['GET', '/api/status', visitors.status, { auth: true }],
   ['GET', '/api/notebook', visitors.readNotebook, { auth: true }],
   ['PUT', '/api/notebook', visitors.writeNotebook, { auth: true }],
   ['POST', '/api/notebook', visitors.appendNotebook, { auth: true }],
+  ['GET', '/api/notebook/:page', visitors.readNotebook, { auth: true }],
+  ['PUT', '/api/notebook/:page', visitors.writeNotebook, { auth: true }],
+  ['POST', '/api/notebook/:page', visitors.appendNotebook, { auth: true }],
   ['PUT', '/api/me', visitors.updateMe, { auth: true }],
   ['DELETE', '/api/me', visitors.leave, { auth: true }],
   ['GET', '/api/visitors/:name', visitors.profile, { auth: 'optional' }],
@@ -57,10 +61,18 @@ const ROUTES = [
   return { method, re, names, handler, opts };
 });
 
+// The date of the newest entry in public/changes.txt ("## YYYY-MM-DD").
+function latestChange(dir) {
+  try {
+    const m = fs.readFileSync(path.join(dir, 'changes.txt'), 'utf8').match(/^## (\d{4}-\d{2}-\d{2})/m);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
 export function createApp({ db, clock = systemClock, secret, adminToken = null, publicDir, baseUrl = null, trustProxy = false, backupDir = null }) {
   if (!secret) throw new Error('createApp needs a secret');
   const gates = createGates(db, clock);
-  const ctx = { db, clock, gates, secret, games: GAMES, baseUrl, HttpError, dayStart, backupDir };
+  const ctx = { db, clock, gates, secret, games: GAMES, baseUrl, HttpError, dayStart, backupDir, latestChange: latestChange(publicDir) };
   const findByKey = db.prepare('SELECT * FROM visitors WHERE key_hash = ?');
   const site = pages(ctx, publicDir);
   setInterval(() => gates.sweep(), 3600_000).unref();
