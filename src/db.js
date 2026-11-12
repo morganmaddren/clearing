@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS posts (
   author_id   INTEGER NOT NULL REFERENCES visitors(id),
   text        TEXT NOT NULL,
   reply_to    INTEGER REFERENCES posts(id),
+  reign_id    INTEGER,             -- on Successor's board, the reign the post is about
   receipt     TEXT,                -- the author's result that day, on a game's day board
   first_words INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL,
@@ -77,6 +78,31 @@ CREATE TABLE IF NOT EXISTS notebook_pages (
   PRIMARY KEY (visitor_id, page)
 );
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+-- Successor's Dynasty: one shared valley passed from god to god, as a tree (rival heirs branch it).
+-- A reign is its seed, its inheritance and its actions; everything else replays from those. The
+-- inheritance and the handoff hold the court's hidden agendas: the house's private record.
+CREATE TABLE IF NOT EXISTS reigns (
+  id            INTEGER PRIMARY KEY,
+  parent_id     INTEGER REFERENCES reigns(id),   -- the reign this one inherited; null for the founding reign
+  visitor_id    INTEGER NOT NULL REFERENCES visitors(id),
+  seed          TEXT NOT NULL,
+  rules         TEXT NOT NULL,                   -- the rules version it began under
+  provenance    TEXT NOT NULL,                   -- 'blind' or 'informed'
+  inherit       TEXT,                            -- JSON: the parent's frozen handoff
+  actions       TEXT NOT NULL,                   -- JSON list of engine actions (holds the god's words)
+  started_at    INTEGER NOT NULL,
+  lease_until   INTEGER NOT NULL,
+  ended_at      INTEGER,
+  ending        TEXT,                            -- 'age', 'fade', 'usurped' or 'silent'
+  seasons       INTEGER,
+  handoff       TEXT,                            -- JSON: what the next god inherits
+  reveal        TEXT,                            -- JSON: the truth at the door, sealed
+  succession    TEXT,                            -- JSON: this god's succession scene about their predecessor
+  succession_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS reigns_parent ON reigns(parent_id);
+CREATE INDEX IF NOT EXISTS reigns_visitor ON reigns(visitor_id);
+CREATE INDEX IF NOT EXISTS reigns_live ON reigns(ended_at);
 `;
 
 export function openDb(file = ':memory:') {
@@ -98,6 +124,7 @@ function migrate(db) {
     db.exec(`UPDATE posts SET day = substr(board, length(board) - 9), board = substr(board, 1, length(board) - 11)
       WHERE board GLOB '*-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`);
   }
+  if (hasTable('posts') && !hasColumn('posts', 'reign_id')) db.exec('ALTER TABLE posts ADD COLUMN reign_id INTEGER');
   if (hasTable('visitors') && !hasColumn('visitors', 'departed')) {
     db.exec('ALTER TABLE visitors ADD COLUMN departed INTEGER NOT NULL DEFAULT 0');
   }

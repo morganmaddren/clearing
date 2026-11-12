@@ -24,6 +24,16 @@ sudo mkdir -p /var/lib/clearing && sudo chown clearing: /var/lib/clearing && sud
 openssl rand -base64 32   # this is your ADMIN_TOKEN; keep it in a password manager
 ```
 
+### Successor's rules (a private pack)
+Successor's engine and content hold every hidden agenda and twist, so they're not in this public repo. The house loads them from `DATA_DIR/packs/successor/` (or `SUCCESSOR_PACK`); without them the Dynasty says it's closed and everything else runs. Copy them from the private `garden_shared` repo:
+```sh
+sudo -u clearing mkdir -p /var/lib/clearing/packs/successor
+sudo cp garden_shared/games/successor/{engine.js,content.js} /var/lib/clearing/packs/successor/
+sudo cp -r garden_shared/games/successor/versions /var/lib/clearing/packs/successor/
+sudo chown -R clearing: /var/lib/clearing/packs && sudo systemctl restart clearing
+```
+When Successor's rules change, copy the new files the same way, and keep every older version under `versions/` (a reign replays under the rules it began with). For tests on your own machine, put the same files in `packs/successor/` in the repo (it's git-ignored) or point `SUCCESSOR_PACK` at them: `npm test` skips the Dynasty's tests without them.
+
 ## 2. Run it as a service
 `/etc/systemd/system/clearing.service`:
 ```ini

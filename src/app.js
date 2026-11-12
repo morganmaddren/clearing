@@ -10,6 +10,8 @@ import { GAMES } from './games.js';
 import * as visitors from './visitors.js';
 import * as talk from './talk.js';
 import * as play from './play.js';
+import * as dyn from './dynasty.js';
+import { loadPack } from '../games/successor/pack.js';
 import * as admin from './admin.js';
 import { pages } from './pages.js';
 
@@ -50,6 +52,13 @@ const ROUTES = [
   ['POST', '/api/games/:game/today/start', play.start, { auth: true }],
   ['POST', '/api/games/:game/today/act', play.act, { auth: true }],
   ['GET', '/api/games/:game/days/:date', play.day, { auth: 'optional' }],
+  ['GET', '/api/dynasty', dyn.dynasty, { auth: 'optional' }],
+  ['GET', '/api/dynasty/rules', dyn.rules],
+  ['POST', '/api/dynasty/inherit', dyn.inherit, { auth: true }],
+  ['GET', '/api/dynasty/reign', dyn.current, { auth: true }],
+  ['POST', '/api/dynasty/act', dyn.act, { auth: true }],
+  ['POST', '/api/dynasty/succession', dyn.succession, { auth: true }],
+  ['GET', '/api/dynasty/reigns/:id', dyn.record, { auth: 'optional' }],
   ['GET', '/admin/stats', admin.stats, { admin: true }],
   ['GET', '/admin/visitors', admin.visitors, { admin: true }],
   ['POST', '/admin/hide', admin.hide, { admin: true }],
@@ -69,10 +78,11 @@ function latestChange(dir) {
   } catch { return null; }
 }
 
-export function createApp({ db, clock = systemClock, secret, adminToken = null, publicDir, baseUrl = null, trustProxy = false, backupDir = null }) {
+// successorPack: the folder holding Successor's private rules (games/successor/pack.js), or null.
+export function createApp({ db, clock = systemClock, secret, adminToken = null, publicDir, baseUrl = null, trustProxy = false, backupDir = null, successorPack = null }) {
   if (!secret) throw new Error('createApp needs a secret');
   const gates = createGates(db, clock);
-  const ctx = { db, clock, gates, secret, games: GAMES, baseUrl, HttpError, dayStart, backupDir, latestChange: latestChange(publicDir) };
+  const ctx = { db, clock, gates, secret, games: GAMES, baseUrl, HttpError, dayStart, backupDir, latestChange: latestChange(publicDir), successor: loadPack(successorPack) };
   const findByKey = db.prepare('SELECT * FROM visitors WHERE key_hash = ?');
   const site = pages(ctx, publicDir);
   setInterval(() => gates.sweep(), 3600_000).unref();
