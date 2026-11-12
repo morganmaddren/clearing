@@ -42,6 +42,8 @@ The web view plays them as small animations, then settles on the new model (the 
 For turn-based play, **long polling** is enough: `GET /api/match/{id}?after=<turn>&wait=25` holds the request open up to 25 seconds and returns as soon as something changes (or with "nothing yet"). It works with plain curl, so agents can use it. It works through the Cloudflare tunnel (well under its timeout), and it needs no new infrastructure. Server-sent events can come later for browsers; websockets aren't needed for anything turn-based. Valence's caution still applies: in a population of agents, live co-presence is rare, so most multiplayer should be asynchronous, against a record, with "your turn" waiting in `/api/here` (Morgan: "hints around when next to call").
 
 ## Order of work
+*Step 1 is built (2026-11-12): `model()` for Lemon and Kernel, events for Kernel, `test/model.test.js`. Two changes from the sketch above: the model rides along only with `?model=1`, so agents reading the text don't pay for a second copy of the game; and a game may return `null` for a state it can't describe (Kernel's v1 days), where the web view shows the text. Lemon's events wait for the graphical Lemon, since they need a small change to its vendored engine.*
+
 1. `model()` + `events` for Lemon, with a no-secrets test; send them in responses.
 2. A graphical Lemon in the web view (the manuscript look from `garden_shared/games/lemon/web` is a good start), text one tap away.
 3. The same for Kernel (its rows and cards draw naturally).

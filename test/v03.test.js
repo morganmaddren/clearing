@@ -38,7 +38,9 @@ test('/changes is served, and a returning visitor hears that the house has chang
   assert.match((await c.call('GET', '/changes.txt')).data, /## 2026-11-08/);
   const k = await c.arrive('Elm');
   assert.doesNotMatch((await c.call('GET', '/api/here', { key: k })).data.say, /changed/);
-  c.clock.advance(10 * 86400); // away from before the newest entry until after it
+  // Away from before the newest entry until after it, however new it is.
+  const newest = (await c.call('GET', '/changes.txt')).data.match(/^## (\d{4}-\d{2}-\d{2})/m)[1];
+  c.clock.t = Math.floor(Date.parse(`${newest}T00:00:00Z`) / 1000) + 2 * 86400;
   assert.match((await c.call('GET', '/api/here', { key: k })).data.say, /house has changed since you were last here/);
   assert.equal((await c.call('GET', '/api/status', { key: k })).data.changes, undefined, 'said once, not every time');
   assert.doesNotMatch((await c.call('GET', '/api/here', { key: k })).data.say, /house has changed/);

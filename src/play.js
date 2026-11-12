@@ -91,13 +91,13 @@ export function today({ ctx, params, visitor: v, query }) {
       also_open: alsoOpen,
     } };
   }
-  const b = playBody(ctx, g, p, JSON.parse(p.state), query.get('brief') === '1');
+  const b = playBody(ctx, g, p, JSON.parse(p.state), query.get('brief') === '1', true, wantsModel(query));
   b.also_open = alsoOpen;
   if (!p.finished_at) b.your_notes = notesFor(ctx, v, g);
   return { body: b };
 }
 
-export function start({ ctx, params, body, visitor: v, client }) {
+export function start({ ctx, params, body, visitor: v, client, query }) {
   const { db, clock, gates, HttpError } = ctx;
   const g = gameOr404(ctx, params.game);
   const date = clock.day();
@@ -123,7 +123,7 @@ export function start({ ctx, params, body, visitor: v, client }) {
     throw e;
   }
   const p = getPlay(ctx, v, g.id, date);
-  const b = playBody(ctx, g, p, state, false);
+  const b = playBody(ctx, g, p, state, false, true, wantsModel(query));
   b.say = `Today's ${g.title} begins${prediction != null ? ', with your prediction sealed' : ''}.${g.length ? ` A whole play is ${g.length}.` : ''} ${b.say}`;
   b.your_notes = notesFor(ctx, v, g);
   return { status: 201, body: b };
@@ -174,8 +174,9 @@ export function act({ ctx, params, body, visitor: v, client, query }) {
   db.prepare('UPDATE plays SET state = ?, commands = ?, finished_at = ?, result = ? WHERE id = ?')
     .run(JSON.stringify(state), JSON.stringify(commands), finished, result ? JSON.stringify(result) : null, p.id);
   const fresh = getPlay(ctx, v, g.id, p.date);
-  const out = playBody(ctx, g, fresh, state, query.get('brief') === '1', false);
+  const out = playBody(ctx, g, fresh, state, query.get('brief') === '1', false, wantsModel(query));
   out.ok = res.ok;
+  if (wantsModel(query) && res.ok && res.events?.length) out.events = res.events;
   if (res.msg) out.say = `${res.msg} ${out.say}`.trim();
   return { status: res.ok ? 200 : 400, body: out };
 }
@@ -187,7 +188,12 @@ export function replay(g, seed, commands, date) {
   return s;
 }
 
-function playBody(ctx, g, p, state, brief, help = true) {
+// The view model rides along only when asked for (?model=1): the web view asks, and agents reading
+// the text aren't charged for a second copy of the game.
+const wantsModel = query => query?.get?.('model') === '1';
+
+function playBody(ctx, g, p, state, brief, help = true, withModel = false) {
+  const model = withModel ? g.model(state) : undefined;
   const which = p.date === ctx.clock.day() ? `Today's ${g.title}` : `${g.title} for ${p.date}`;
   if (p.finished_at) {
     const r = JSON.parse(p.result);
@@ -199,6 +205,7 @@ function playBody(ctx, g, p, state, brief, help = true) {
       result: r.summary, medal: r.medal, date: p.date,
       standings: st.list,
       view: g.view(state, { brief }),
+      model,
       board: `GET /api/boards/${g.id}`,
       results: `GET /api/games/${g.id}/days/${p.date}`,
     };
@@ -207,6 +214,7 @@ function playBody(ctx, g, p, state, brief, help = true) {
     say: `${g.progress(state) ? `${which}: ${g.progress(state)}. ` : ''}${deadline(ctx, p.date)}`,
     date: p.date,
     view: g.view(state, { brief }),
+    model,
     act: help ? { path: `POST /api/games/${g.id}/today/act`, body: { command: '...' }, commands: g.commands } : undefined,
   };
 }
