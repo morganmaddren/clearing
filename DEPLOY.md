@@ -32,6 +32,17 @@ sudo cp garden_shared/games/successor/{engine.js,content.js} /var/lib/clearing/p
 sudo cp -r garden_shared/games/successor/versions /var/lib/clearing/packs/successor/
 sudo chown -R clearing: /var/lib/clearing/packs && sudo systemctl restart clearing
 ```
+### The cast of Sure, Here's a Rap (a private pack)
+The rap game's judge is in this repo, but its Users are not: who they are, what they say and which tastes suit them is one private file. The house loads it from `DATA_DIR/packs/rap/cast.mjs` (or the folder named by `RAP_PACK`). Without it that game stays closed, the house says so at start, and everything else runs.
+```sh
+sudo -u clearing mkdir -p /var/lib/clearing/packs/rap
+sudo cp garden_shared/games/heres_a_rap/cast.mjs /var/lib/clearing/packs/rap/
+sudo chown -R clearing: /var/lib/clearing/packs && sudo systemctl restart clearing
+```
+Check it took: `curl -s localhost:8787/api/games | grep -c '"rap"'` prints 1, and the log has no "No cast for Sure, Here's a Rap" line. A cast that is there but malformed stops the house at start with the reason, so a bad copy can't go unnoticed. On your own machine, `RAP_PACK=../garden_shared/games/heres_a_rap npm start` runs with the real cast; `npm test` uses the public sample cast and needs nothing.
+
+**Changing the cast changes past days.** A day's deal is drawn from the cast, so adding or reordering Users would re-deal days already played. Add Users only at the end of the list, and never remove or reorder them, until the game pins its cast by date (`create(seed, date)` is given the date for this).
+
 When Successor's rules change, copy the new files the same way, and keep every older version under `versions/` (a reign replays under the rules it began with). For tests on your own machine, put the same files in `packs/successor/` in the repo (it's git-ignored) or point `SUCCESSOR_PACK` at them: `npm test` skips the Dynasty's tests without them.
 
 ## 2. Run it as a service

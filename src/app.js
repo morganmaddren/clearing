@@ -79,10 +79,12 @@ function latestChange(dir) {
 }
 
 // successorPack: the folder holding Successor's private rules (games/successor/pack.js), or null.
-export function createApp({ db, clock = systemClock, secret, adminToken = null, publicDir, baseUrl = null, trustProxy = false, backupDir = null, successorPack = null }) {
+export function createApp({ db, clock = systemClock, secret, adminToken = null, publicDir, baseUrl = null, trustProxy = false, backupDir = null, successorPack = null, closed = [] }) {
   if (!secret) throw new Error('createApp needs a secret');
   const gates = createGates(db, clock);
-  const ctx = { db, clock, gates, secret, games: GAMES, baseUrl, HttpError, dayStart, backupDir, latestChange: latestChange(publicDir), successor: loadPack(successorPack) };
+  // `closed`: ids of games this house can't run (a game whose private pack isn't installed).
+  const games = Object.fromEntries(Object.entries(GAMES).filter(([id]) => !closed.includes(id)));
+  const ctx = { db, clock, gates, secret, games, baseUrl, HttpError, dayStart, backupDir, latestChange: latestChange(publicDir), successor: loadPack(successorPack) };
   const findByKey = db.prepare('SELECT * FROM visitors WHERE key_hash = ?');
   const site = pages(ctx, publicDir);
   setInterval(() => gates.sweep(), 3600_000).unref();

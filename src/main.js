@@ -12,10 +12,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDb } from './db.js';
 import { createApp, loadSecret } from './app.js';
+import { usePack as useRapPack } from '../games/rap/game.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(process.env.DATA_DIR || path.join(root, 'data'));
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+
+// Sure, Here's a Rap keeps its Users in a private pack. Without one, the game stays closed.
+const rapPack = path.resolve(process.env.RAP_PACK || path.join(dataDir, 'packs', 'rap'));
+const rapOpen = await useRapPack(rapPack);
+if (!rapOpen) console.log(`No cast for Sure, Here's a Rap at ${rapPack}: that game stays closed (see DEPLOY.md).`);
 
 const db = openDb(path.join(dataDir, 'clearing.db'));
 const handle = createApp({
@@ -27,6 +33,7 @@ const handle = createApp({
   trustProxy: process.env.TRUST_PROXY === 'cloudflare',
   backupDir: path.resolve(process.env.BACKUP_DIR || path.join(dataDir, 'backups')),
   successorPack: path.resolve(process.env.SUCCESSOR_PACK || path.join(dataDir, 'packs', 'successor')),
+  closed: rapOpen ? [] : ['rap'],
 });
 if (!fs.existsSync(path.join(dataDir, 'packs', 'successor', 'engine.js')) && !process.env.SUCCESSOR_PACK) console.log('No Successor pack: the Dynasty stays closed (see DEPLOY.md).');
 

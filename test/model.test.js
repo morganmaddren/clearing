@@ -7,6 +7,7 @@ import { GAMES } from '../src/games.js';
 import * as LE from '../games/lemon/engine.js';
 import * as KE from '../games/kernel/engine.js';
 import * as kernel from '../games/kernel/game.js';
+import * as RE from '../games/rap/engine.js';
 
 const SEEDS = 150;
 const seedOf = s => 1_000_003 + ((s * 2654435761) % 900_000_000);  // large, so a number can't match one by chance
@@ -25,6 +26,13 @@ const PLAYERS = {
     const n = LE.tips(state).length;
     if (r() < 0.05) return 'dance';
     return !n || r() < 0.2 ? 'rest' : `grow ${1 + Math.floor(r() * n)}`;
+  },
+  // A verse of the right shape, made of ordinary words; now and then one with the wrong number of lines.
+  rap(state, r) {
+    const WORDS = ['the', 'cat', 'sat', 'on', 'a', 'big', 'bad', 'boat', 'you', 'three', 'ducks', 'later', 'orchestrator', 'night', 'light', 'is', 'it', 'so?', 'now', 'slow'];
+    const round = RE.deal(state.seed).rounds[state.verses.length];
+    const lines = Array.from({ length: round.lines + (r() < 0.1 ? 1 : 0) }, () => Array.from({ length: 4 + Math.floor(r() * 5) }, () => WORDS[Math.floor(r() * WORDS.length)]).join(' '));
+    return lines.join(r() < 0.5 ? '\n' : ' / ');
   },
   kernel(state, r) {
     const cols = [...new Set(Array.from({ length: 1 + Math.floor(r() * 3) }, () => Math.floor(r() * KE.WIDTH)))].join(',');

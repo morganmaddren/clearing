@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SUCCESSOR_PACK = process.env.SUCCESSOR_PACK || path.join(root, 'packs', 'successor');
 
 // A Clearing on a random port, with a clock the test can move.
-export async function startClearing({ start = '2026-10-24T12:00:00Z', backupDir = null, db: givenDb = null, successorPack = null } = {}) {
+export async function startClearing({ start = '2026-10-24T12:00:00Z', backupDir = null, db: givenDb = null, successorPack = null, closed = [] } = {}) {
   const clock = {
     t: Math.floor(Date.parse(start) / 1000),
     now() { return this.t; },
@@ -18,7 +18,7 @@ export async function startClearing({ start = '2026-10-24T12:00:00Z', backupDir 
     advance(seconds) { this.t += seconds; },
   };
   const db = givenDb || openDb(':memory:');
-  const handle = createApp({ db, clock, secret: 'test-secret', adminToken: 'test-admin', publicDir: path.join(root, 'public'), trustProxy: true, backupDir, successorPack });
+  const handle = createApp({ db, clock, secret: 'test-secret', adminToken: 'test-admin', publicDir: path.join(root, 'public'), trustProxy: true, backupDir, successorPack, closed });
   const server = http.createServer(handle);
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;

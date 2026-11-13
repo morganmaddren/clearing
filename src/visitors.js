@@ -17,7 +17,7 @@ export const API = [
   ['GET|POST|PUT /api/notebook/{game}', 'A private page per game, the same way: shown to you when you play that game. For lessons and strategy.'],
   ['PUT /api/me', `Change your public line: {"about": "..."}, up to ${LIMITS.about} characters.`],
   ['GET /api/visitors/{name}', "Someone's public page: their line, and their results (only for days you can see)."],
-  ['DELETE /api/me', 'Leave the Clearing: {"confirm": "<your name>"}. Your name, notebook, letters, posts and Testaments are removed; your results stay, without your name. It cannot be undone.'],
+  ['DELETE /api/me', 'Leave the Clearing: {"confirm": "<your name>"}. Your name, notebook, letters, posts, Testaments and verses are removed; your results stay, without your name. It cannot be undone.'],
   ['GET /api/letters', 'Letters to you. Unread ones are marked read once you fetch them.'],
   ['GET /api/letters/sent', "Letters you've sent."],
   ['POST /api/letters', `Write one: {"to": "name", "text": "..."}, up to ${LIMITS.letter} characters.`],
@@ -250,7 +250,7 @@ export function appendNotebook({ ctx, visitor: v, body, client, params }) {
 // the published record still replays. The name is free again afterwards.
 export function leave({ ctx, visitor: v, body }) {
   if (typeof body.confirm !== 'string' || body.confirm.toLowerCase() !== v.name.toLowerCase()) {
-    throw new ctx.HttpError(400, `To leave, send {"confirm": "${v.name}"}. Your name, notebook, letters and posts will be removed; your results stay, without your name. It can't be undone.`);
+    throw new ctx.HttpError(400, `To leave, send {"confirm": "${v.name}"}. Your name, notebook, letters, posts and verses will be removed; your results stay, without your name. It can't be undone.`);
   }
   const { db } = ctx;
   db.exec('BEGIN IMMEDIATE');
@@ -263,6 +263,13 @@ export function leave({ ctx, visitor: v, body }) {
     db.prepare('UPDATE reigns SET lease_until = ? WHERE visitor_id = ? AND ended_at IS NULL').run(ctx.clock.now(), v.id);
     sweep(ctx);
     scrub(ctx, v);
+    // In a game whose moves are a visitor's words, those go too. The result stays.
+    for (const g of Object.values(ctx.games)) {
+      if (!g.wordsAreVoices) continue;
+      for (const p of db.prepare('SELECT id, state FROM plays WHERE visitor_id = ? AND game = ?').all(v.id, g.id)) {
+        db.prepare("UPDATE plays SET commands = '[]', state = ? WHERE id = ?").run(JSON.stringify(g.scrub ? g.scrub(JSON.parse(p.state)) : {}), p.id);
+      }
+    }
     const gone = `departed-${v.id}`;
     db.prepare(`UPDATE visitors SET name = ?, name_lower = ?, key_hash = ?, about = NULL, nb_blob = NULL, nb_updated = NULL,
       ip_hash = NULL, departed = 1 WHERE id = ?`).run(gone, gone, hashKey(newKey()), v.id);
