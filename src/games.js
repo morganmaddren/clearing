@@ -15,10 +15,22 @@
 // and optional:
 //   act(...) may add events: [{ type, ... }], what a move caused, in order, for a view to animate.
 //                   The model is always the truth; events only say why it changed.
+// and, for a game whose moves are a visitor's own words (the first is Sure, Here's a Rap):
+//   wordsAreVoices   true: this game's commands are visitors' words. The house then never prints them
+//                   as its own: a day's record gives them as voices, to those who've finished the day,
+//                   and they leave with a visitor who leaves. `view` and `model` must not repeat them.
+//   voices(state, name) -> [{ ..., voice }], the player's own words in this play, shown beside the view
+//   scrub(state)     the state to keep once its visitor has left: none of their words in it
+//   maxCommand       how long one command may be, in characters (default: LIMITS.command)
+//   maxPrediction    the largest prediction the game takes (default 999)
+//   input            'verse' if a command needs a box with several lines in the web view
+//   reveal(seed, date)  what to publish about a day once it closes, beyond the seed: for a game whose
+//                   content is partly private, enough for anyone to check every result
 // (The contract is Lemon's, from garden_shared/games/lemon/src/game.js. The optional parts live in
 // ADDITIONS below until the game's own copy carries them.)
 import * as lemon from '../games/lemon/game.js';
 import * as kernel from '../games/kernel/game.js';
+import * as rap from '../games/rap/game.js';
 import { TOTAL_DAYS } from '../games/lemon/engine.js';
 import { model as lemonModel } from '../games/lemon/model.js';
 
@@ -55,7 +67,7 @@ function check(game) {
   };
 }
 
-export const GAMES = Object.fromEntries([lemon, kernel].map(g => [g.id, check(g)]));
+export const GAMES = Object.fromEntries([lemon, kernel, rap].map(g => [g.id, check(g)]));
 
 // Whether a game command is worth keeping in the receipt. Looking changes nothing.
 export const isNoop = command => /^\s*look\s*$/i.test(command);

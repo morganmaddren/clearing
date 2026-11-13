@@ -137,7 +137,7 @@ const views = {
     const meta = games.find(g => g.id === game) || {};
     const { data: d } = await api('GET', `/api/games/${game}/today${date ? `?date=${date}` : ''}`);
     if (d.start) {
-      const pred = h('input', { type: 'number', min: 0, max: 999, id: 'pred', placeholder: 'optional' });
+      const pred = h('input', { type: 'number', min: 0, max: meta.max_prediction || 999, id: 'pred', placeholder: 'optional' });
       const blind = h('input', { type: 'radio', name: 'prov', value: 'blind', checked: true, id: 'blind' });
       const informed = h('input', { type: 'radio', name: 'prov', value: 'informed', id: 'informed' });
       const err = h('p', { class: 'error' });
@@ -241,7 +241,11 @@ const views = {
 };
 
 function gameScreen(game, d, meta = {}) {
-  const input = h('input', { placeholder: meta.example ? `a command, like ${meta.example}` : 'a command', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  // Most games take one short command. A game that takes a verse gets a box with room for it.
+  const verse = meta.input === 'verse';
+  const input = verse
+    ? h('textarea', { rows: 7, maxlength: meta.max_command || 640, placeholder: 'your verse, one line per line', autocapitalize: 'off', spellcheck: 'false' })
+    : h('input', { placeholder: meta.example ? `a command, like ${meta.example}` : 'a command', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
   const err = h('p', { class: 'error' });
   const date = d.date || today();
   const send = async cmd => {
@@ -257,16 +261,19 @@ function gameScreen(game, d, meta = {}) {
       h('span', { class: 'count' }, `${x.place}.`), h('span', {}, x.name || 'someone who has left'), h('strong', {}, x.result),
       h('span', { class: 'count' }, [x.provenance, x.prediction != null ? `predicted ${x.prediction}` : null].filter(Boolean).join(' · '))))) : null,
     h('pre', { class: 'view' }, d.view || ''),
+    ...(d.your_words || []).map(w => voiceEl(w, w.round ? h('span', { class: 'count' }, `round ${w.round}`) : null)),
     done ? null : notesEl(game, meta, meta.notes, true),
     done ? h('p', {}, h('button', { onclick: () => show('board', game) }, 'Talk about it'), ' ',
       h('button', { class: 'quiet', onclick: async () => {
         const r = await api('GET', `/api/games/${game}/days/${date}`);
-        render(h('h1', {}, `Results for ${date}`), say(r.data.say), ...(r.data.results || []).map(x => h('div', { class: 'card row' },
+        // Where a game's moves are what its players wrote, the results carry them as voices: show them.
+        render(h('h1', {}, `Results for ${date}`), say(r.data.say), ...(r.data.results || []).flatMap(x => [h('div', { class: 'card row' },
           x.name ? h('a', { href: '#', onclick: e => { e.preventDefault(); show('visitor', x.name); } }, x.name) : h('span', {}, 'someone who has left'), h('strong', {}, x.result),
-          h('span', { class: 'count' }, [x.provenance, x.prediction != null ? `predicted ${x.prediction}` : null, x.new_here ? 'new here' : null].filter(Boolean).join(' · ')))));
+          h('span', { class: 'count' }, [x.provenance, x.prediction != null ? `predicted ${x.prediction}` : null, x.new_here ? 'new here' : null].filter(Boolean).join(' · '))),
+          ...(x.commands || []).filter(m => m && m.voice).map((m, i) => voiceEl(m, h('span', { class: 'count' }, `round ${i + 1}`)))]));
       } }, 'Results'))
       : h('form', { class: 'card', onsubmit: e => { e.preventDefault(); if (input.value.trim()) send(input.value.trim()); } },
-        input, h('div', { class: 'quick' }, quick), h('button', { type: 'submit' }, 'Do it'), err));
+        input, h('div', { class: 'quick' }, quick), h('button', { type: 'submit' }, verse ? 'Send the verse (one chance)' : 'Do it'), err));
   if (d.ok === false) err.textContent = d.say;
   if (!done) input.focus({ preventScroll: true });
 }

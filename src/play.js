@@ -47,6 +47,7 @@ export function list({ ctx, visitor: v }) {
       return {
         id: g.id, title: g.title, what: g.blurb, length: g.length ?? undefined, rules: `GET /api/games/${g.id}/rules`,
         predict: g.predict, example: g.example ?? undefined, quick: g.quick.length ? g.quick : undefined,
+        input: g.input ?? undefined, max_command: g.maxCommand ?? undefined, max_prediction: g.maxPrediction ?? undefined,
         today: !v ? undefined : !p ? 'waiting for you' : p.finished_at ? JSON.parse(p.result).summary : 'in progress',
         unfinished: open.length ? open.map(x => `${x.date}: finish by ${iso(dayClose(x.date))}`) : undefined,
         seed_commitment: { date: today, sha256: commitmentFor(ctx, g.id, today), how: 'sha256 of "<seed>:<nonce>"; both are published when the day closes' },
@@ -110,7 +111,7 @@ export function start({ ctx, params, body, visitor: v, client, query }) {
   let prediction = null;
   if (body.prediction != null) {
     prediction = Number(body.prediction);
-    if (!gates.check('play-prediction', Number.isInteger(prediction) && prediction >= 0 && prediction <= 999, client)) {
+    if (!gates.check('play-prediction', Number.isInteger(prediction) && prediction >= 0 && prediction <= (g.maxPrediction ?? 999), client)) {
       throw new HttpError(400, 'A prediction is a whole number, 0 or more.');
     }
   }
@@ -152,8 +153,8 @@ export function act({ ctx, params, body, visitor: v, client, query }) {
   }
   if (p.finished_at) throw new HttpError(409, `${g.title} for ${p.date} is finished. Talk about it: GET /api/boards/${g.id}`);
 
-  const c = clean(body.command, LIMITS.command);
-  if (c.error) throw new HttpError(400, `Send one command, like {"command": "${g.commands[0].split(' ')[0]} ..."}.`);
+  const c = clean(body.command, g.maxCommand ?? LIMITS.command);
+  if (c.error) throw new HttpError(400, g.maxCommand ? `${c.error} Send {"command": "${g.example ?? '...'}"}.` : `Send one command, like {"command": "${g.commands[0].split(' ')[0]} ..."}.`);
   const wait = gates.rate('act', v.id, RATES.act, client);
   if (wait) throw new HttpError(429, `Slow down: try again in ${wait} seconds.`, { retry_after: wait });
 
@@ -193,6 +194,14 @@ export function replay(g, seed, commands, date) {
 const wantsModel = query => query?.get?.('model') === '1';
 
 function playBody(ctx, g, p, state, brief, help = true, withModel = false) {
+  const body = playBodyFor(ctx, g, p, state, brief, help, withModel);
+  // A game whose moves are your own words hands them back as voices, never inside its view.
+  const words = g.voices ? g.voices(state, ctx.db.prepare('SELECT name FROM visitors WHERE id = ?').get(p.visitor_id).name) : [];
+  if (words.length) body.your_words = words;
+  return body;
+}
+
+function playBodyFor(ctx, g, p, state, brief, help, withModel) {
   const model = withModel ? g.model(state) : undefined;
   const which = p.date === ctx.clock.day() ? `Today's ${g.title}` : `${g.title} for ${p.date}`;
   if (p.finished_at) {
@@ -260,18 +269,28 @@ export function day({ ctx, params, visitor: v, client }) {
     ...who(r), provenance: r.provenance, prediction: r.prediction ?? undefined,
     new_here: r.arrived >= Math.floor(Date.parse(`${date}T00:00:00Z`) / 1000) || undefined,
   });
+  // In most games a command is the house's own grammar ("grow 4,7"), published when the day closes so
+  // anyone can replay it. Where commands are visitors' words they are voices: open at once to those
+  // who've finished (they can't be spoiled, and reading each other's is the point), and never shown
+  // for someone who has left.
+  const moves = r => {
+    if (!g.wordsAreVoices) return closed ? JSON.parse(r.commands) : undefined;
+    return r.departed ? undefined : JSON.parse(r.commands).map(text => ({ voice: voice(r.name, text) }));
+  };
   const results = done.map(r => {
     const res = JSON.parse(r.result);
-    return { ...base(r), result: res.summary, medal: res.medal, [g.predict]: res.sortKey[0], finished: iso(r.finished_at), commands: closed ? JSON.parse(r.commands) : undefined };
+    return { ...base(r), result: res.summary, medal: res.medal, [g.predict]: res.sortKey[0], finished: iso(r.finished_at), commands: moves(r) };
   });
-  const stopped = closed ? unfinished.map(r => ({ ...base(r), result: 'unfinished: unscored', stopped_at: g.progress(JSON.parse(r.state)) ?? undefined, commands: JSON.parse(r.commands) })) : undefined;
+  const stopped = closed ? unfinished.map(r => ({ ...base(r), result: 'unfinished: unscored', stopped_at: g.progress(JSON.parse(r.state)) ?? undefined, commands: moves(r) })) : undefined;
   return { body: {
     say: `${g.title} for ${date}: ${done.length} finished, ${unfinished.length} unfinished.${closed
-      ? ' The day has closed, so its seed and nonce are published: check the commitment, then replay any result (finished or not) with the game\'s engine and these commands.'
+      ? ` The day has closed, so its seed and nonce are published: check the commitment, then replay any result (finished or not) with the game\'s engine and these commands.${g.wordsAreVoices ? ' Here the commands are what each visitor wrote, so they come as voices; a visitor who has left took theirs along.' : ''}`
       : ` The day closes at ${iso(dayClose(date))}; then the seed, every move and the unfinished games are published.`}`,
     seed_commitment: commitmentFor(ctx, g.id, date),
     seed: closed ? seedFor(ctx, g.id, date) : undefined,
     nonce: closed ? nonceFor(ctx, g.id, date) : undefined,
+    // A game with private content says what the day held, so its results can still be checked.
+    deal: closed && g.reveal ? g.reveal(seedFor(ctx, g.id, date), date) : undefined,
     results,
     unfinished: stopped,
   } };
