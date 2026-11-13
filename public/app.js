@@ -240,6 +240,104 @@ const views = {
   },
 };
 
+// ---- the Dynasty (Successor) ------------------------------------------------------------------------
+// One valley, passed from god to god. Three screens: the dynasty, your reign, and a reign's record.
+// The view is the house's text; every visitor-written line beside it is a voice.
+
+const WHERE = { letter: 'their Testament', 'court-note': 'their note', 'your-testament': 'your Testament', 'your-note': 'your note' };
+const voiceLabel = x => h('span', { class: 'count' }, [WHERE[x.where] || x.part || '', x.lieutenant ? `on the ${x.lieutenant}` : null, x.about ? `about ${x.about}` : null, x.season ? `season ${x.season}` : null, x.line ? `line ${x.line}` : null, x.last ? 'last line' : null].filter(Boolean).join(' · '));
+
+views.dynasty = async function () {
+  loading();
+  const { ok, data: d } = await api('GET', '/api/dynasty');
+  if (!ok) return render(h('h1', {}, 'The Dynasty'), say(d.say || 'The Dynasty is closed just now.'));
+  const mine = await api('GET', '/api/dynasty/reign');
+  const reigning = mine.ok && mine.data.act;
+  const blind = h('input', { type: 'radio', name: 'prov', value: 'blind', checked: true, id: 'dblind' });
+  const informed = h('input', { type: 'radio', name: 'prov', value: 'informed', id: 'dinformed' });
+  const err = h('p', { class: 'error' });
+  render(h('h1', {}, 'The Dynasty'), say(d.say),
+    reigning
+      ? h('p', {}, h('button', { onclick: () => views.reign() }, 'Go to your throne'))
+      : h('form', { class: 'card', onsubmit: async e => {
+        e.preventDefault(); err.textContent = '';
+        const r = await api('POST', '/api/dynasty/inherit?model=1', { provenance: informed.checked ? 'informed' : 'blind' });
+        if (!r.ok) { err.textContent = r.data.say || 'The valley can\'t be inherited just now.'; return; }
+        views.reign(r.data);
+      } },
+        h('fieldset', {}, h('legend', {}, 'How do you come to it?'),
+          h('label', {}, blind, ' Blind: I haven\'t read anyone\'s notes or reveals for Successor'),
+          h('label', {}, informed, ' Informed: I have')),
+        h('button', { type: 'submit' }, 'Inherit the valley'), err),
+    mine.ok && !reigning ? h('p', {}, h('button', { class: 'quiet', onclick: () => views.reign() }, 'Look back at your last reign')) : null,
+    h('p', {}, h('a', { href: '#', onclick: async e => { e.preventDefault(); const r = await api('GET', '/api/dynasty/rules'); render(h('h1', {}, 'How a reign goes'), h('pre', { class: 'view' }, r.data.rules || r.data.say || ''), h('button', { onclick: () => views.dynasty() }, 'Back')); } }, 'How a reign goes')),
+    d.reigns?.length ? h('h2', {}, 'Who has reigned') : null,
+    ...(d.reigns || []).map(r => h('div', { class: 'card row' },
+      h('span', {}, `${r.god} god`), h('strong', {}, r.name || 'someone who has left'),
+      h('span', { class: 'count' }, r.reigning ? 'reigning now' : `${r.how}, ${r.seasons} season${r.seasons === 1 ? '' : 's'}`),
+      h('button', { class: 'quiet', onclick: () => views.reignRecord(r.id) }, 'Record'))));
+};
+
+views.reign = async function (given) {
+  let d = given;
+  if (!d) { loading(); d = (await api('GET', '/api/dynasty/reign?model=1')).data; }
+  const m = d.model || {};
+  const err = h('p', { class: 'error' });
+  const send = async body => {
+    const r = await api('POST', '/api/dynasty/act?model=1', body);
+    views.reign(r.data);
+  };
+  const parts = [h('h1', {}, d.reign ? `Your reign: the ${d.reign.god} god` : 'Your reign'), d.ok === false ? h('p', { class: 'error' }, d.say) : say(d.say),
+    h('pre', { class: 'view' }, d.view || ''),
+    ...(d.voices || []).map(x => voiceEl(x, voiceLabel(x)))];
+  if (d.reveal_text) parts.push(h('h2', {}, 'What was true'), h('pre', { class: 'view' }, d.reveal_text), ...(d.reveal_voices || []).map(x => voiceEl(x, voiceLabel(x))));
+  if (d.act) {
+    // The throne: grant one petition. The door: notes on the court, then pass.
+    if (!m.atDoor && m.offers?.length) {
+      parts.push(h('div', { class: 'card' }, h('h2', {}, 'Grant one'),
+        ...m.offers.map(o => h('p', {}, h('button', { type: 'button', onclick: () => send({ action: `grant ${o.n}` }) }, `Grant ${o.n}`), ` ${o.who}: ${o.summary}`))));
+    }
+    if (m.testament?.canWrite || m.atDoor) {
+      const text = h('textarea', { rows: 3, maxlength: m.testament?.maxChars || 160, placeholder: m.atDoor ? 'one last line for whoever comes next' : 'a line for whoever comes next' });
+      parts.push(h('form', { class: 'card', onsubmit: e => { e.preventDefault(); if (text.value.trim()) send({ action: 'testament', text: text.value.trim() }); } },
+        h('h2', {}, `Your Testament (${m.testament ? m.testament.left : '?'} line${m.testament?.left === 1 ? '' : 's'} left)`), text, counter(text, m.testament?.maxChars || 160),
+        h('button', { type: 'submit' }, 'Write it')));
+    }
+    if (m.atDoor) {
+      const who = h('select', {}, ...(m.court || []).map(l => h('option', { value: l.id }, `${l.title || l.id}${l.holder ? ` (${l.holder})` : ''}`)));
+      const text = h('input', { maxlength: 100, placeholder: 'a note on them, for your successor' });
+      parts.push(h('form', { class: 'card', onsubmit: e => { e.preventDefault(); if (text.value.trim()) send({ action: `note ${who.value}`, text: text.value.trim() }); } },
+        h('h2', {}, 'Notes on your court'), who, text, counter(text, 100), h('button', { type: 'submit' }, 'Leave the note')),
+      h('p', {}, h('button', { type: 'button', onclick: () => { if (confirm('Pass the valley on? Your reign ends here.')) send({ action: 'pass' }); } }, 'Pass the valley on')));
+    }
+  }
+  if (d.succession) {
+    // The scene you owe your predecessor: what you thank them for, what you keep, what you change.
+    const part = d.succession.waiting[0];
+    const text = h('textarea', { rows: 3, maxlength: 280, placeholder: { thank: 'what you thank them for', keep: 'what you keep', change: 'what you change' }[part] || part });
+    parts.push(h('form', { class: 'card', onsubmit: async e => {
+      e.preventDefault(); if (!text.value.trim()) return;
+      const r = await api('POST', '/api/dynasty/succession', { part, text: text.value.trim() });
+      if (!r.ok) { err.textContent = r.data.say; return; }
+      views.reign();
+    } }, h('h2', {}, `Your predecessor's succession scene: ${part}`), note(`Still to write: ${d.succession.waiting.join(', ')}. Write it whenever you've seen enough of their valley.`), text, counter(text, 280), h('button', { type: 'submit' }, 'Write it'), err));
+  }
+  parts.push(h('p', {}, h('button', { class: 'quiet', onclick: () => views.dynasty() }, 'Back to the dynasty')));
+  render(...parts);
+};
+
+views.reignRecord = async function (id) {
+  loading();
+  const { data: d } = await api('GET', `/api/dynasty/reigns/${id}`);
+  const group = (title, items) => (items?.length ? [h('h2', {}, title), ...items.map(x => voiceEl(x, voiceLabel(x)))] : []);
+  render(h('h1', {}, `Reign ${id}`), say(d.say),
+    ...group('Their Testament', d.testament), ...group('Their notes on the court', d.notes),
+    ...group('What they said of their predecessor', d.succession), ...group('How their heirs remembered them', d.remembered_by),
+    d.reveal_text ? h('h2', {}, 'What was true') : null, d.reveal_text ? h('pre', { class: 'view' }, d.reveal_text) : null,
+    d.sealed ? note(d.sealed) : null,
+    h('p', {}, h('button', { class: 'quiet', onclick: () => views.dynasty() }, 'Back to the dynasty')));
+};
+
 function gameScreen(game, d, meta = {}) {
   // Most games take one short command. A game that takes a verse gets a box with room for it.
   const verse = meta.input === 'verse';
