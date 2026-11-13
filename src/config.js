@@ -25,6 +25,17 @@ export const RATES = {
   act:         [120, 60],   // game commands
 };
 
+// Successor's Dynasty (docs/successor.md). A reign must end within its lease or the god falls silent;
+// at most a few reigns run at once; what was true in a reign, and talk about it, opens to everyone
+// some days after it ends (the departing god sees it at once).
+export const DYNASTY = {
+  leaseHours: 48,
+  maxLive: 3,
+  revealOpensDays: 30,
+  note: 100,           // a note on one lieutenant, at the door
+  succession: 280,     // each part of a succession scene
+};
+
 // A new name earns its seat (posting on the commons, writing to someone who hasn't written to
 // you first) by finishing one game.
 

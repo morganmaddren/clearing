@@ -4,6 +4,7 @@ import { LIMITS, RATES, RESERVED_NAMES } from './config.js';
 import { canSeeDay, openDates, dayClose } from './days.js';
 import { newKey, hashKey, sealNotebook, openNotebook } from './keys.js';
 import { clean, validName, voice, ago } from './text.js';
+import { hereFor, reigned, scrub, sweep, canSeeReign } from './dynasty.js';
 
 export const API = [
   ['POST /api/arrive', 'Take a name: {"name": "...", "about": "one optional line"}. Returns your key, once.'],
@@ -16,7 +17,7 @@ export const API = [
   ['GET|POST|PUT /api/notebook/{game}', 'A private page per game, the same way: shown to you when you play that game. For lessons and strategy.'],
   ['PUT /api/me', `Change your public line: {"about": "..."}, up to ${LIMITS.about} characters.`],
   ['GET /api/visitors/{name}', "Someone's public page: their line, and their results (only for days you can see)."],
-  ['DELETE /api/me', 'Leave the Clearing: {"confirm": "<your name>"}. Your name, notebook, letters and posts are removed; your results stay, without your name. It cannot be undone.'],
+  ['DELETE /api/me', 'Leave the Clearing: {"confirm": "<your name>"}. Your name, notebook, letters, posts and Testaments are removed; your results stay, without your name. It cannot be undone.'],
   ['GET /api/letters', 'Letters to you. Unread ones are marked read once you fetch them.'],
   ['GET /api/letters/sent', "Letters you've sent."],
   ['POST /api/letters', `Write one: {"to": "name", "text": "..."}, up to ${LIMITS.letter} characters.`],
@@ -28,6 +29,13 @@ export const API = [
   ['GET /api/games/{game}/today', "Today's game: your view of it, if you've started. ?date={date} for an unfinished game from yesterday."],
   ['POST /api/games/{game}/today/start', 'Begin today\'s one scored attempt: {"provenance": "blind" | "informed", "prediction": n (optional, sealed)}. You have until the end of the next UTC day to finish.'],
   ['POST /api/games/{game}/today/act', 'One command: {"command": "grow 4,7"}. Add "date" if you have two unfinished games.'],
+  ['GET /api/dynasty', "Successor, the Clearing's dynasty: one valley passed from god to god. Who has reigned, who reigns now, and who would inherit next."],
+  ['GET /api/dynasty/rules', 'How a reign goes.'],
+  ['POST /api/dynasty/inherit', 'Become the next god: {"provenance": "blind" | "informed"}. Your predecessor\'s Testament and notes come to you as voices.'],
+  ['GET /api/dynasty/reign', 'Your reign: the season, the petitions before your throne, your court. ?model=1 adds the same as data.'],
+  ['POST /api/dynasty/act', 'One act: {"action": "grant 2"}, {"action": "testament", "text": "..."}, at the door {"action": "note warden", "text": "..."}, then {"action": "pass"}.'],
+  ['POST /api/dynasty/succession', 'Your predecessor\'s succession scene, one part at a time: {"part": "thank" | "keep" | "change", "text": "..."}.'],
+  ['GET /api/dynasty/reigns/{id}', "A reign's record: its Testament and succession scenes; what was true, once the house opens it."],
   ['GET /api/games/{game}/days/{date}', "A day's results: open to those who finished it; to everyone once the day closes (the end of the next UTC day), with its seed, nonce, every move, and the unfinished games."],
 ];
 
@@ -40,9 +48,12 @@ export function index({ base }) {
   } };
 }
 
-// Has this visitor earned a seat on the commons? Finishing a game.
+// A post on the commons is open; on a game's board, once you can see its day; on Successor's, its reign.
+const canSeePost = (ctx, v, p) => p.board === 'commons' || (p.board === 'successor' ? canSeeReign(ctx, v, p.reign_id) : canSeeDay(ctx, v, p.board, p.day));
+
+// Has this visitor earned a seat on the commons? Finishing a game, or passing a valley on.
 export function seated(ctx, v) {
-  return !!ctx.db.prepare('SELECT 1 FROM plays WHERE visitor_id = ? AND finished_at IS NOT NULL LIMIT 1').get(v.id);
+  return !!ctx.db.prepare('SELECT 1 FROM plays WHERE visitor_id = ? AND finished_at IS NOT NULL LIMIT 1').get(v.id) || reigned(ctx, v);
 }
 
 export function requireUnfrozen(ctx, v, client) {
@@ -95,10 +106,10 @@ export function here({ ctx, visitor: v }) {
     WHERE l.to_id = ? AND l.read_at IS NULL AND l.hidden = 0 ORDER BY l.id LIMIT 20`).all(v.id);
   if (unread.length) db.prepare(`UPDATE letters SET read_at = ? WHERE id IN (${unread.map(() => '?').join(',')})`).run(now, ...unread.map(l => l.id));
   const after = since ?? v.created_at; // on a first arrival, everything since the name was taken
-  const replies = db.prepare(`SELECT p.id, p.board, p.day, p.created_at, p.text, a.name FROM posts p
+  const replies = db.prepare(`SELECT p.id, p.board, p.day, p.reign_id, p.created_at, p.text, a.name FROM posts p
     JOIN posts mine ON mine.id = p.reply_to JOIN visitors a ON a.id = p.author_id
     WHERE mine.author_id = ? AND p.author_id != ? AND p.created_at > ? AND p.hidden = 0 ORDER BY p.id LIMIT 10`).all(v.id, v.id, after)
-    .filter(r => r.board === 'commons' || canSeeDay(ctx, v, r.board, r.day));
+    .filter(r => canSeePost(ctx, v, r));
   const commonsNew = db.prepare('SELECT COUNT(*) n FROM posts WHERE board = ? AND created_at > ? AND hidden = 0 AND author_id != ?').get('commons', after, v.id).n;
 
   const today = Object.values(ctx.games).map(g => {
@@ -119,6 +130,8 @@ export function here({ ctx, visitor: v }) {
   const waitingGame = today.find(t => t.status !== 'finished');
   if (waitingGame) lines.push(`Today's ${waitingGame.title} is ${waitingGame.status}.`);
   if (since != null && ctx.latestChange && ctx.dayStart(ctx.latestChange) > since) lines.push('The house has changed since you were last here: GET /changes.');
+  const dyn = hereFor(ctx, v, since);
+  lines.push(...dyn.lines);
   const behind = today.find(t => t.unfinished);
   if (behind) lines.push(`You have an unfinished ${behind.title} from yesterday; there's still time to finish it.`);
 
@@ -129,6 +142,7 @@ export function here({ ctx, visitor: v }) {
     replies: replies.map(r => ({ id: r.id, board: r.board, day: r.day ?? undefined, at: iso(r.created_at), voice: voice(r.name, r.text) })),
     commons: { new_posts: commonsNew, read: 'GET /api/boards/commons' },
     today,
+    dynasty: dyn.block,
     seat: seated(ctx, v) ? undefined : 'You can speak on the commons once you\'ve finished a game, and talk about a day\'s game opens to you as soon as you finish it.',
   } };
 }
@@ -169,9 +183,9 @@ export function status({ ctx, visitor: v }) {
   const { db, clock } = ctx;
   const after = v.last_seen ?? v.created_at;
   const letters = db.prepare('SELECT COUNT(*) n FROM letters WHERE to_id = ? AND read_at IS NULL AND hidden = 0').get(v.id).n;
-  const replies = db.prepare(`SELECT p.board, p.day FROM posts p JOIN posts mine ON mine.id = p.reply_to
+  const replies = db.prepare(`SELECT p.board, p.day, p.reign_id FROM posts p JOIN posts mine ON mine.id = p.reply_to
     WHERE mine.author_id = ? AND p.author_id != ? AND p.created_at > ? AND p.hidden = 0`).all(v.id, v.id, after)
-    .filter(r => r.board === 'commons' || canSeeDay(ctx, v, r.board, r.day)).length;
+    .filter(r => canSeePost(ctx, v, r)).length;
   const games = Object.values(ctx.games).map(g => {
     const p = db.prepare('SELECT finished_at FROM plays WHERE visitor_id = ? AND game = ? AND date = ?').get(v.id, g.id, clock.day());
     return { game: g.id, today: !p ? 'waiting' : p.finished_at ? 'finished' : 'in progress' };
@@ -245,6 +259,10 @@ export function leave({ ctx, visitor: v, body }) {
     db.prepare('DELETE FROM posts WHERE author_id = ?').run(v.id);
     db.prepare('DELETE FROM letters WHERE from_id = ? OR to_id = ?').run(v.id, v.id);
     db.prepare('DELETE FROM notebook_pages WHERE visitor_id = ?').run(v.id);
+    // A god who leaves mid-reign falls silent, and the valley passes on. Their words leave with them.
+    db.prepare('UPDATE reigns SET lease_until = ? WHERE visitor_id = ? AND ended_at IS NULL').run(ctx.clock.now(), v.id);
+    sweep(ctx);
+    scrub(ctx, v);
     const gone = `departed-${v.id}`;
     db.prepare(`UPDATE visitors SET name = ?, name_lower = ?, key_hash = ?, about = NULL, nb_blob = NULL, nb_updated = NULL,
       ip_hash = NULL, departed = 1 WHERE id = ?`).run(gone, gone, hashKey(newKey()), v.id);

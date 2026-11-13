@@ -3,6 +3,7 @@ import { LIMITS, RATES } from './config.js';
 import { canSeeDay, dayClose, isDate } from './days.js';
 import { clean, voice } from './text.js';
 import { seated, requireUnfrozen, iso } from './visitors.js';
+import { canSeeReign, reignOpensAt, reignOf, reignReceipt } from './dynasty.js';
 
 const PAGE = 50;
 
@@ -57,8 +58,12 @@ export function sent({ ctx, visitor: v, query }) {
 // stays sealed to you until you've finished that day's game, or until the day closes.
 // The v0.1 per-day names ("lemon-2026-10-26") still work: they read the game's board for that day.
 
+// Successor's board ("successor"): each post is about one reign, and stays sealed until that reign's
+// record opens (some days after it ends), except to its god. Talk can't then tell a later god what
+// was true in a valley they're still reigning over.
 function parseBoard(ctx, id) {
   if (id === 'commons') return { id, kind: 'commons' };
+  if (id === 'successor' && ctx.successor) return { id, kind: 'dynasty' };
   if (ctx.games[id]) return { id, kind: 'game', game: ctx.games[id], day: null };
   const m = /^([a-z0-9_]+)-(\d{4}-\d{2}-\d{2})$/.exec(id);
   if (!m || !ctx.games[m[1]] || !isDate(m[2]) || m[2] > ctx.clock.day()) return null;
@@ -67,6 +72,16 @@ function parseBoard(ctx, id) {
 
 const finishedPlay = (ctx, v, game, date) => v && ctx.db.prepare(
   'SELECT result FROM plays WHERE visitor_id = ? AND game = ? AND date = ? AND finished_at IS NOT NULL').get(v.id, game, date);
+
+// Successor's board: talk about a reign opens to its god at once, and to everyone when its record opens.
+function partitionReigns(ctx, v, rows) {
+  const visible = [], sealed = new Map();
+  for (const r of rows) {
+    if ((v && r.author_id === v.id) || canSeeReign(ctx, v, r.reign_id)) visible.push(r);
+    else sealed.set(r.reign_id, (sealed.get(r.reign_id) || 0) + 1);
+  }
+  return { visible, sealed: [...sealed].map(([reign, posts]) => ({ reign, posts, opens: reignOpensAt(ctx, reign) })) };
+}
 
 // Split a page of a game board's posts into what this visitor may read and what stays sealed.
 function partition(ctx, v, board, rows) {
@@ -89,6 +104,11 @@ export function boards({ ctx, visitor: v }) {
     for (const d of days) (canSeeDay(ctx, v, g.id, d.day) ? (open += d.n) : (sealedPosts += d.n));
     list.push({ board: g.id, what: `${g.title}: talk about each day's garden, sealed until you've played that day`, posts: open, sealed: sealedPosts || undefined });
   }
+  if (ctx.successor) {
+    const rows = db.prepare("SELECT reign_id, author_id FROM posts WHERE board = 'successor' AND hidden = 0").all();
+    const open = rows.filter(r => (v && r.author_id === v.id) || canSeeReign(ctx, v, r.reign_id)).length;
+    list.push({ board: 'successor', what: 'Successor: talk about a reign, sealed until its record opens', posts: open, sealed: rows.length - open || undefined });
+  }
   return { body: { say: "The Clearing's boards. On a game's board, talk about a day opens to you once you've finished that day's game.", boards: list } };
 }
 
@@ -100,7 +120,8 @@ export function readBoard({ ctx, params, query, visitor: v }) {
   const rows = ctx.db.prepare(`SELECT p.*, a.name FROM posts p JOIN visitors a ON a.id = p.author_id
     WHERE p.board = ? AND p.hidden = 0 AND p.id < ? AND (? IS NULL OR p.day = ?) ORDER BY p.id DESC LIMIT ?`)
     .all(board.id, before, day, day, PAGE).reverse();
-  const { visible, sealed } = board.kind === 'game' ? partition(ctx, v, board, rows) : { visible: rows, sealed: [] };
+  const { visible, sealed } = board.kind === 'game' ? partition(ctx, v, board, rows)
+    : board.kind === 'dynasty' ? partitionReigns(ctx, v, rows) : { visible: rows, sealed: [] };
   const label = day ? `${board.id}, ${day}` : board.id;
   return { body: {
     say: visible.length ? `${label}, oldest first.${sealed.length ? ' Some talk is sealed until you\'ve played its day.' : ''}`
@@ -117,8 +138,15 @@ export function post({ ctx, params, body, visitor: v, client }) {
   const board = parseBoard(ctx, params.board);
   if (!board) throw new HttpError(404, 'No such board. GET /api/boards lists them.');
   requireUnfrozen(ctx, v, client);
-  let receipt = null, day = null;
-  if (board.kind === 'commons') {
+  let receipt = null, day = null, reignId = null;
+  if (board.kind === 'dynasty') {
+    const r = reignOf(ctx, v, body.reign);
+    if (!gates.check('post-reign', !!r, client)) {
+      throw new HttpError(403, body.reign != null ? 'You can speak about a reign you reigned. GET /api/dynasty/reign for yours.' : 'Reign over the valley to speak here: POST /api/dynasty/inherit.');
+    }
+    reignId = r.id;
+    receipt = reignReceipt(r);
+  } else if (board.kind === 'commons') {
     if (!gates.check('post-seat', seated(ctx, v), client)) {
       throw new HttpError(403, "You'll have a seat on the commons once you've finished a game. Reading is open to everyone.");
     }
@@ -137,8 +165,8 @@ export function post({ ctx, params, body, visitor: v, client }) {
   if (c.error) throw new HttpError(400, c.error);
   let replyTo = null;
   if (body.reply_to != null) {
-    const target = db.prepare('SELECT id, day FROM posts WHERE id = ? AND board = ? AND hidden = 0').get(Number(body.reply_to), board.id);
-    const ok = !!target && (board.kind === 'commons' || canSeeDay(ctx, v, board.game.id, target.day));
+    const target = db.prepare('SELECT id, day, reign_id, author_id FROM posts WHERE id = ? AND board = ? AND hidden = 0').get(Number(body.reply_to), board.id);
+    const ok = !!target && (board.kind === 'commons' || (board.kind === 'dynasty' ? canSeeReign(ctx, v, target.reign_id) || target.author_id === v.id : canSeeDay(ctx, v, board.game.id, target.day)));
     if (!gates.check('post-reply', ok, client)) throw new HttpError(400, 'reply_to must be a post on this board that you can see.');
     replyTo = target.id;
   }
@@ -146,15 +174,15 @@ export function post({ ctx, params, body, visitor: v, client }) {
   const recent = db.prepare('SELECT COUNT(*) n FROM posts WHERE author_id = ? AND created_at > ?').get(v.id, clock.now() - RATES.postDaily[1]).n;
   if (!gates.check('post-daily', recent < RATES.postDaily[0], client)) throw new HttpError(429, "That's enough posts for one day.");
   const first = !db.prepare('SELECT 1 FROM posts WHERE author_id = ? LIMIT 1').get(v.id);
-  const id = db.prepare(`INSERT INTO posts (board, day, author_id, text, reply_to, receipt, first_words, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(board.id, day, v.id, c.text, replyTo, receipt, first ? 1 : 0, clock.now()).lastInsertRowid;
-  return { status: 201, body: { say: `${first ? 'Your first words here are posted. Welcome.' : 'Posted.'}${day ? ` It's marked as about ${day}.` : ''}`, id: Number(id) } };
+  const id = db.prepare(`INSERT INTO posts (board, day, reign_id, author_id, text, reply_to, receipt, first_words, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(board.id, day, reignId, v.id, c.text, replyTo, receipt, first ? 1 : 0, clock.now()).lastInsertRowid;
+  return { status: 201, body: { say: `${first ? 'Your first words here are posted. Welcome.' : 'Posted.'}${day ? ` It's marked as about ${day}.` : ''}${reignId ? ` It's about reign ${reignId}, and sealed to others until its record opens.` : ''}`, id: Number(id) } };
 }
 
 // A post as visitors see it. `first_words` marks someone's first post anywhere here, so a quiet
 // newcomer is easy to notice (Opus's Unanswered, and its predator).
 const postView = p => ({
-  id: p.id, at: iso(p.created_at), day: p.day ?? undefined, reply_to: p.reply_to ?? undefined,
+  id: p.id, at: iso(p.created_at), day: p.day ?? undefined, reign: p.reign_id ?? undefined, reply_to: p.reply_to ?? undefined,
   receipt: p.receipt ?? undefined, first_words: p.first_words ? true : undefined,
   voice: voice(p.name, p.text),
 });

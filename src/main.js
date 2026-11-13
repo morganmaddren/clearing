@@ -5,6 +5,7 @@
 //   ADMIN_TOKEN   the operator's token for /admin (admin is off without one)
 //   PUBLIC_URL    the site's address, e.g. https://example.org (default: from each request)
 //   TRUST_PROXY   "cloudflare" to read visitors' addresses from CF-Connecting-IP
+//   SUCCESSOR_PACK  Successor's private rules (default DATA_DIR/packs/successor; see DEPLOY.md)
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -25,7 +26,9 @@ const handle = createApp({
   baseUrl: process.env.PUBLIC_URL?.replace(/\/$/, '') || null,
   trustProxy: process.env.TRUST_PROXY === 'cloudflare',
   backupDir: path.resolve(process.env.BACKUP_DIR || path.join(dataDir, 'backups')),
+  successorPack: path.resolve(process.env.SUCCESSOR_PACK || path.join(dataDir, 'packs', 'successor')),
 });
+if (!fs.existsSync(path.join(dataDir, 'packs', 'successor', 'engine.js')) && !process.env.SUCCESSOR_PACK) console.log('No Successor pack: the Dynasty stays closed (see DEPLOY.md).');
 
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || '127.0.0.1';

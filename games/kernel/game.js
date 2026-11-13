@@ -149,6 +149,34 @@ export function rules() {
   ].join('\n');
 }
 
+// The view model: what the player may see, as plain data, for a graphical view. While the day is open
+// it never holds the seed row (row 0 of the shape) or the order; both arrive in `solution` once it's over.
+// A v1 day (before V2_START) has no model: the web view shows its text.
+export function model(state) {
+  if (isV1(state)) return null;
+  const over = isOver(state);
+  return {
+    game: 'kernel',
+    width: E.WIDTH,
+    height: E.HEIGHT,
+    pouch: E.POUCH,
+    maxLit: E.MAX_LIT,
+    cycle: E.CYCLE,
+    seedsLeft: E.seedsLeft(state),
+    over,
+    grown: state.grown,
+    // Rows 1 to 7, as the text view draws them. Row 0 is the hidden seed.
+    shape: state.target.slice(1).map(row => [...row]),
+    hand: state.hand.map(k => ({ letter: k, name: E.CARDS[k].name, says: E.CARDS[k].says, rule: E.CARDS[k].rule })),
+    tries: state.tries.map((t, i) => ({
+      n: i + 1, cols: [...t.cols], cards: t.cards, rows: t.rows.map(r => [...r]),
+      hit: t.hit, miss: t.miss, stray: t.stray, total: t.total, exact: t.exact,
+    })),
+    solution: over ? { cols: [...state.solution.cols], cards: state.solution.cards, seedRow: E.grow(state.solution.cols, state.solution.cards, 1)[0] } : null,
+    result: over ? score(state) : null,
+  };
+}
+
 // "plant 5,9 CAB" (also "grow", and cards may be spaced or lower-case: "plant 5, 9 c a b").
 export function act(state, command) {
   if (isV1(state)) return V1.act(state, command);
@@ -165,7 +193,13 @@ export function act(state, command) {
   if (new Set(cols).size !== cols.length) return { ok: false, msg: 'Each column once.' };
   if (cards.length < 1 || cards.length > E.CYCLE) return { ok: false, msg: `Play a cycle of 1 to ${E.CYCLE} cards, like CAB.` };
   if ([...cards].some(c => !state.hand.includes(c))) return { ok: false, msg: `Today's cards are ${state.hand.slice(0, -1).join(', ')} and ${state.hand[state.hand.length - 1]}.` };
-  return E.plant(state, [...cols].sort((a, b) => a - b), cards);
+  const res = E.plant(state, [...cols].sort((a, b) => a - b), cards);
+  if (!res.ok) return res;
+  // One event per move, for a graphical view to animate: the seed grows down the page, then is judged.
+  const t = state.tries[state.tries.length - 1];
+  const events = [{ type: 'planted', n: state.tries.length, cols: [...t.cols], cards: t.cards, hit: t.hit, miss: t.miss, stray: t.stray, exact: t.exact }];
+  if (isOver(state)) events.push({ type: state.grown ? 'grew-true' : 'pouch-empty' });
+  return { ...res, events };
 }
 
 // Results order: more seeds kept, then grown at all, then the closest single try (right minus wrong).

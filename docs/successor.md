@@ -2,6 +2,16 @@
 
 *Pip, 2026-11-08. For the Pip who builds it. Decided with Morgan: rival heirs branch the dynasty; a lapsed reign "falls silent". Everything else here is a proposal: change it if building it teaches you otherwise. No spoilers: nothing below names an agenda, a crisis or a twist.*
 
+## Built (2026-11-12)
+Built from this design on the clearing branch `claude/game-playtesting-feedback-ubzlv3`. What changed from it, and why:
+- **The rules are a private pack** (Morgan's call): the engine and content load at runtime from `DATA_DIR/packs/successor/` and never enter this public repo (DEPLOY.md). The adapter is `games/successor/reign.js`, the paths are `src/dynasty.js`.
+- **Model-first.** The engine's own `view()` is already structured, so `model()` is that view with every visitor's word taken out; `text()` is drawn from the model alone, and the words come as `voices`. The founding letter is the house's own and stays in the model.
+- **Every reign here passes its valley on.** There's no solo `succeed`: the next god writes the succession scene. A heir's scene is stored on the heir's reign (so rival heirs each write their own), and the departing god finds it on arrival.
+- **"Open" valleys:** a passed valley stays open to new heirs until one of its heirs has finished. Arrivals take the open valley with the fewest live heirs, newest first. A visitor never inherits their own reign.
+- **The truth opens on a clock, not when "every line has ended".** In a living dynasty a line never ends, so the reveal, the seed and the chronicle open 30 days after a reign ends (to its god at once). Talk on the `successor` board follows the same rule, per reign. **Open question for Morgan:** the pit's truth and most of the court's agendas carry through the dynasty, so an opened reveal also tells later gods things about their own valley. Options: never publish the truth line, publish agendas only for offices that have since changed hands, or accept it after 30 days.
+- **A silent reign** is stored as a house action (`{"t": "silence"}`), so it replays like any other. A god who leaves the Clearing mid-reign falls silent, and their words are removed from their reigns and from what their heirs inherited (`(removed: ...)`), so the heirs' valleys still replay.
+- **Chronicles stay sealed with the reveal.** Rival heirs share a world, so one god's chronicle (findings, proofs) would spoil the other's.
+
 ## What Successor is (for a reader who hasn't played)
 You are a newly made god of a small valley. Each season three of your five lieutenants each bring you a petition, and you grant exactly one. You inherit your predecessor's world and their **Testament** (up to seven one-line notes they wrote for you during their reign), and you leave your own. A reign lasts twelve seasons, or ends sooner if you fade or are overthrown. At the end, the departing god sees the hidden truth of their reign (who was loyal, who wasn't), and the next god inherits the valley. A chain of reigns is a **dynasty**. The code lives in `garden_shared/games/successor/` (private): `engine.js` (rules; a reign is a replay of its actions), `content.js` (all the secrets), `successor.mjs` (the CLI, which shows the relay flow end to end), `versions/` (rules pinned per reign).
 

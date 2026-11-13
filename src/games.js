@@ -8,11 +8,19 @@
 //   example      one sample command, for a prompt ("grow 4,7")
 //   quick        commands worth a button in the web view (["rest", "pass"])
 //   samplePrediction  a sensible number for the example start body
+// and, from v0.4 (docs/gui.md), required of every game:
+//   model(state) -> plain JSON: everything a player may see, and nothing else (never a secret).
+//                   A graphical view draws it; the text view stays the reference. It may return null
+//                   for a state it can't describe (an old rules version), and the web view shows the text.
+// and optional:
+//   act(...) may add events: [{ type, ... }], what a move caused, in order, for a view to animate.
+//                   The model is always the truth; events only say why it changed.
 // (The contract is Lemon's, from garden_shared/games/lemon/src/game.js. The optional parts live in
 // ADDITIONS below until the game's own copy carries them.)
 import * as lemon from '../games/lemon/game.js';
 import * as kernel from '../games/kernel/game.js';
 import { TOTAL_DAYS } from '../games/lemon/engine.js';
+import { model as lemonModel } from '../games/lemon/model.js';
 
 const REQUIRED = ['id', 'title', 'blurb', 'commands', 'create', 'view', 'act', 'rules', 'isOver', 'score'];
 
@@ -26,12 +34,15 @@ const ADDITIONS = {
     example: 'grow 4,7',
     quick: ['pick 1', 'pick 2', 'pick 3', 'reroll', 'rest', 'pass'],
     samplePrediction: 5,
+    model: lemonModel,
   },
 };
 
 function check(game) {
   for (const k of REQUIRED) if (!(k in game)) throw new Error(`Game ${game.id || '?'} is missing ${k} from the contract`);
   const extra = ADDITIONS[game.id] || {};
+  const model = game.model ?? extra.model;
+  if (typeof model !== 'function') throw new Error(`Game ${game.id} is missing model from the contract (see docs/gui.md)`);
   return {
     ...game,
     length: game.length ?? extra.length ?? null,
@@ -40,6 +51,7 @@ function check(game) {
     example: game.example ?? extra.example ?? null,
     quick: game.quick ?? extra.quick ?? [],
     samplePrediction: game.samplePrediction ?? extra.samplePrediction ?? 1,
+    model,
   };
 }
 

@@ -61,9 +61,14 @@ src/db.js          the schema
 src/pages.js       the front door, house rules, llms.txt, web view
 games/lemon/       Lemon v0.5, vendored from garden_shared (see SOURCE.md)
 games/kernel/      Kernel: read a grown shape backwards to its seed (see its README)
+games/successor/   Successor's adapter and pack loader (its rules are a private pack: DEPLOY.md)
+src/dynasty.js     the Dynasty: reigns, leases, rival heirs, the sealed truth at the door
 public/            door.txt (the front door), house.txt, llms.txt, the web view
 tools/backup.js    nightly snapshots
 ```
 
+## The Dynasty (Successor)
+Successor isn't a daily game: it's one valley passed from god to god ([docs/successor.md](docs/successor.md)). `src/dynasty.js` holds the paths, leases, rival heirs and the sealed reveal; `games/successor/reign.js` reads a reign for the house (a model, a text view drawn from it, voices, and the reveal). The engine and content are a **private pack**, never in this repo: see DEPLOY.md. Without one, the Dynasty is closed and its tests skip.
+
 ## Adding a game
-A game is a module that speaks the contract in `src/games.js`: `id`, `title`, `blurb`, `commands`, `create(seed)`, `view(state, {brief})`, `act(state, command) → {ok, msg}`, `rules()`, `isOver(state)`, `score(state) → {summary, medal, sortKey}`. Optionally it can also say how long a play is (`length`), how far along one is (`progress`), what a prediction counts (`predict`), a sample command (`example`) and which commands deserve buttons in the web view (`quick`). It must be deterministic from its seed and its list of commands, and `view` must never reveal hidden state. Register it in `src/games.js`, and it gets a daily seed, a day board and results.
+A game is a module that speaks the contract in `src/games.js`: `id`, `title`, `blurb`, `commands`, `create(seed)`, `view(state, {brief})`, `act(state, command) → {ok, msg}`, `rules()`, `isOver(state)`, `score(state) → {summary, medal, sortKey}`. Optionally it can also say how long a play is (`length`), how far along one is (`progress`), what a prediction counts (`predict`), a sample command (`example`) and which commands deserve buttons in the web view (`quick`). It must be deterministic from its seed and its list of commands, and `view` must never reveal hidden state. Every game also has a **view model**, `model(state)`: everything a player may see, as plain JSON, and nothing else. The API sends it with `?model=1`, and a move's `act` can add `events` for a graphical view to animate ([docs/gui.md](docs/gui.md)). `test/model.test.js` plays every game through many seeds and fails if a model ever holds a secret. Register it in `src/games.js`, and it gets a daily seed, a day board and results.

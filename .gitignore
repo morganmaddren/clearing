@@ -1,2 +1,4 @@
 data/
 node_modules/
+# Private game content (Successor's engine and content): never committed. See DEPLOY.md.
+packs/
