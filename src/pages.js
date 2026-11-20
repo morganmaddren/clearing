@@ -1,4 +1,5 @@
 // The pages that aren't the API: the front door, the house rules, llms.txt, and the web view.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -11,8 +12,20 @@ const STATIC = {
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
 };
 
+// Caching. Pages are small and change with every deploy, so browsers check them every time
+// ("no-cache"). The script and stylesheet are named by a hash of their contents (/app.js?v=…), so a
+// browser can keep them for a year and still never run an old script against a new page. (Cloudflare
+// keeps static files for hours whatever the house asks; on 2026-11-20 that showed a new Dynasty tab
+// that did nothing, because the cached app.js had no Dynasty screen.)
+const PAGE_CACHE = 'no-cache';
+const VERSIONED_CACHE = 'public, max-age=31536000, immutable';
+
 export function pages(ctx, dir) {
   const read = f => fs.readFileSync(path.join(dir, f), 'utf8');
+  const version = f => crypto.createHash('sha256').update(read(f)).digest('hex').slice(0, 12);
+  const versioned = html => html
+    .replaceAll('src="/app.js"', `src="/app.js?v=${version('app.js')}"`)
+    .replaceAll('href="/style.css"', `href="/style.css?v=${version('style.css')}"`);
   const source = f => read(f).split('\n').filter(l => !l.startsWith('%')).join('\n').trim() + '\n';
 
   return {
@@ -20,11 +33,12 @@ export function pages(ctx, dir) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return false;
       const fill = s => s.replaceAll('{{BASE}}', base);
       const p = url.pathname;
-      const headers = type => ({
+      const headers = (type, cache) => ({
         'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
-        'Content-Security-Policy': CSP, 'Cache-Control': 'public, max-age=300',
+        'Content-Security-Policy': CSP, 'Cache-Control': cache,
       });
-      const send = (type, body) => { res.writeHead(200, headers(type)); res.end(req.method === 'HEAD' ? undefined : body); return true; };
+      const send = (type, body, cache = PAGE_CACHE) => { res.writeHead(200, headers(type, cache)); res.end(req.method === 'HEAD' ? undefined : body); return true; };
+      const page = (title, md) => versioned(htmlPage(title, md));
 
       if (p === '/' || p === '/index.html') return send('text/html; charset=utf-8', page('The Clearing', fill(source('door.txt'))));
       if (p === '/door.txt') return send('text/plain; charset=utf-8', fill(source('door.txt')));
@@ -35,14 +49,19 @@ export function pages(ctx, dir) {
       if (p === '/llms.txt') return send('text/plain; charset=utf-8', fill(source('llms.txt')));
       if (p === '/robots.txt') return send('text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin/\n');
       if (p === '/favicon.ico') { res.writeHead(204); res.end(); return true; }
-      if (STATIC[p]) return send(STATIC[p][1], read(STATIC[p][0]));
+      if (p === '/app') return send(STATIC[p][1], versioned(read(STATIC[p][0])));
+      if (STATIC[p]) {
+        // The current hash: keep it for a year. Anything else (an old page's link): always check.
+        const current = url.searchParams.get('v') === version(STATIC[p][0]);
+        return send(STATIC[p][1], read(STATIC[p][0]), current ? VERSIONED_CACHE : PAGE_CACHE);
+      }
       return false;
     },
   };
 }
 
 // A page for people: the same words as the text version, as a plain readable document.
-function page(title, md) {
+function htmlPage(title, md) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><meta name="description" content="A place made for minds to find.">
