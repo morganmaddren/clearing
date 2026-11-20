@@ -44,7 +44,7 @@ function fate(c) {
 
 export function yearWindow(seed, commands, { date = null, by = null } = {}) {
   const s = create(seed);
-  const placed = {}, lemonAt = {}, revealedAt = {};
+  const placed = {}, lemonAt = {}, revealedAt = {}, ripeLog = {};
   const water = [{ day: 1, water: s.water, capacity: E.capacity(s), spilled: false }];
   let ranDry = null, sealedOn = null, logSeen = s.log.length;
   const spillDays = new Set();
@@ -62,6 +62,7 @@ export function yearWindow(seed, commands, { date = null, by = null } = {}) {
         const k = key(layer, x, y);
         if (grid[y][x] && !(k in placed)) placed[k] = day;
         if (layer === 'canopy' && grid[y][x]?.lemon && !(k in lemonAt) && !grid[y][x].winter) lemonAt[k] = s.day;
+        if (layer === 'canopy' && s.phase === 'play' && E.PIECES[grid[y][x]?.piece]?.blossom) (ripeLog[k] ??= {})[s.day] = grid[y][x].ripe ?? 0;
         if (layer === 'soil' && s.revealed[y][x] && !(k in revealedAt)) revealedAt[k] = day;
       }
     }
@@ -85,6 +86,12 @@ export function yearWindow(seed, commands, { date = null, by = null } = {}) {
     cells.push({
       layer: 'canopy', x, y, piece: c.piece, dirs: c.dirs, entry: entryOf(s, 'canopy', x, y, c), depth: depthOf(s, 'canopy', x, y),
       placed: placed[k] ?? 0, lemonAt: lemonAt[k] ?? null, fate: fate(c),
+      // A blossom's ripeness at the start of each day (0 before it grew), so a view can grow it.
+      ...(p.blossom ? { ripe: Array.from({ length: E.TOTAL_DAYS }, (_, i) => {
+        let r = 0;
+        for (let d = 1; d <= i + 1; d++) if (ripeLog[k]?.[d] != null) r = ripeLog[k][d];
+        return Math.min(r, E.RIPE_AT);
+      }) } : {}),
       leaf: !!p.leaf, blossom: !!p.blossom, glowed: !!(p.leaf && c.dirs.length > 1),
     });
   }

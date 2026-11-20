@@ -49,7 +49,7 @@ header p { margin: .3rem 0 0; color: var(--muted); max-width: 34rem; }
 .years button[aria-pressed="true"] { color: var(--night); background: var(--lemon); border-color: var(--lemon); }
 .years button:focus-visible, .controls button:focus-visible, input[type=range]:focus-visible, details summary:focus-visible, .others button:focus-visible { outline: 2px solid var(--lemon); outline-offset: 2px; }
 figure { margin: 0; display: grid; gap: .8rem; }
-.glass { width: 100%; max-width: 30rem; margin: 0 auto; aspect-ratio: 440 / 580; }
+.glass { width: 100%; max-width: 30rem; margin: 0 auto; aspect-ratio: 440 / 630; }
 .glass svg { width: 100%; height: 100%; display: block; }
 .when { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-variant-numeric: tabular-nums; }
 .when .day { font-family: var(--display); font-size: 1.35rem; }
@@ -60,14 +60,16 @@ input[type=range] { flex: 1; min-width: 0; accent-color: var(--lemon); }
 figcaption { font-family: var(--serif); font-size: 1.15rem; line-height: 1.45; font-style: italic; }
 .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: .45rem 1rem; margin: 0; padding: 0; list-style: none; font-size: .88rem; color: var(--muted); }
 .legend li { display: flex; gap: .55rem; align-items: center; min-width: 0; }
-.legend i { flex: none; width: 1.1rem; height: 1.1rem; border: 2px solid var(--lead); border-radius: 2px; box-shadow: 0 0 0 1px #3c4160; }
+.legend .sw { flex: none; display: flex; gap: 2px; }
+.legend i { width: .95rem; height: 1.1rem; border: 2px solid var(--lead); border-radius: 2px; box-shadow: 0 0 0 1px #3c4160; }
+.legend li { align-items: flex-start; }
 h2 { font-family: var(--display); font-weight: 400; font-size: 1.3rem; margin: 0 0 .5rem; letter-spacing: .02em; }
 details { border-top: 1px solid var(--line); padding-top: .8rem; }
 summary { cursor: pointer; color: var(--muted); }
 pre { overflow-x: auto; font: .78rem/1.35 ui-monospace, 'SF Mono', Menlo, monospace; color: var(--ink); background: #070b1d; padding: .9rem; border-radius: 6px; }
 .others { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .9rem; }
 .others button { background: none; border: 0; padding: 0; color: var(--muted); font: .8rem var(--body); text-align: left; cursor: pointer; display: grid; gap: .3rem; }
-.others .thumb { aspect-ratio: 440 / 580; }
+.others .thumb { aspect-ratio: 440 / 630; }
 .others .thumb svg { width: 100%; height: 100%; display: block; }
 .others b { color: var(--ink); font-weight: 500; }
 .note { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--line); padding-top: 1rem; }
@@ -77,7 +79,7 @@ pre { overflow-x: auto; font: .78rem/1.35 ui-monospace, 'SF Mono', Menlo, monosp
 <div class="wrap">
   <header>
     <h1>The Lemon Window</h1>
-    <p>A finished year of Lemon as stained glass. Lead is the wood that grew, glass is what lived, and the light behind it is the water the tree held. These are real years from the Clearing, rebuilt from their seeds and moves.</p>
+    <p>A finished year of Lemon as stained glass, where every colour is something that happened. The branches are amber, the leaves are tinted by the season they grew, and the light behind the sky is the water the tree held. These are real years from the Clearing, rebuilt from their seeds and moves.</p>
   </header>
 
   <nav class="years" id="years" aria-label="Years"></nav>
@@ -107,7 +109,7 @@ pre { overflow-x: auto; font: .78rem/1.35 ui-monospace, 'SF Mono', Menlo, monosp
     <div class="others" id="others"></div>
   </section>
 
-  <p class="note">A first prototype, for the feel. Lead follows the branches; the palette is manuscript pigment on a night sky. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
+  <p class="note">Version 2. The sky is cut into irregular panes and the year is set into it as glass: amber branches, merged leaves, lemons hanging from their branches and lighting the sky around them. Every colour is something that happened. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
 </div>
 
 <script>
@@ -117,23 +119,24 @@ const SEASONS = ['Spring', 'Summer', 'Autumn'];
 const $ = id => document.getElementById(id);
 let cur = 0, timer = null;
 
+const sw = (...cs) => cs.map(c => '<i style="background:' + c + '"></i>').join('');
 const LEGEND = [
-  ['Lead', GLASS.lead, 'wood that grew, thicker toward the trunk'],
-  ['Clear blue', GLASS.clear[0], 'sky: nothing grew here'],
-  ['Amber', GLASS.wood, 'a branch'],
-  ['Green', GLASS.leaf[1], 'a living leaf; a gold vein if it glowed'],
-  ['Lemon', GLASS.lemon, 'a lemon harvested'],
-  ['Pale gold, frost star', GLASS.winterLemon, 'a sealed bud that woke in the frost'],
-  ['Etched flower', GLASS.blossomPane, 'a blossom that never ripened'],
-  ['Rose', GLASS.bud, 'a sealed bud that slept'],
-  ['Crazed grey', GLASS.withered, 'withered in the frost; a lemon that fell'],
-  ['Lapis', GLASS.lapis, 'water found in the soil'],
-  ['Opaque grey', GLASS.stone, 'stone'],
-  ['Gold diamond', GLASS.keepsake, 'a keepsake, with a page'],
-  ['Brown strata', GLASS.soil[0], 'soil the roots reached'],
-  ['Dark', GLASS.dark, 'soil never reached'],
+  [sw(GLASS.lead), 'Lead', 'every line of the window'],
+  [sw(...GLASS.sky.slice(0, 3)), 'Sky', 'lit by the water the tree held that day; in winter, each season’s water, spring at the bottom'],
+  [sw(...GLASS.wood), 'Amber branches', 'wood that grew, in spring, summer or autumn, thicker toward the trunk'],
+  [sw(GLASS.leaf[0][0], GLASS.leaf[1][0], GLASS.leaf[2][0]), 'Leaves', 'tinted by the season they grew; a gold glow if they fed growth'],
+  [sw(GLASS.lemon), 'Lemons', 'harvested, lighting the glass around them'],
+  [sw(GLASS.winterLemon), 'Frost star', 'a sealed bud that woke as a winter lemon'],
+  [sw(GLASS.petal[0]), 'Blossoms', 'larger the riper they were; grey if winter came first'],
+  [sw(GLASS.bud), 'Rose buds', 'a sealed bud, pointing the way its branch grew'],
+  [sw(GLASS.withered), 'Grey', 'withered in the frost; a dashed lemon fell'],
+  [sw(GLASS.ruby, GLASS.emerald), 'Gems', 'rare pieces: a Crossing, a Fruiting Branch'],
+  [sw(GLASS.bead), 'Blue beads', 'root hairs, drinking'],
+  [sw(GLASS.lapis, GLASS.stone, GLASS.keepsake), 'In the soil', 'water found, stone, a keepsake with a page'],
+  [sw(GLASS.soil[0], GLASS.dark), 'Soil', 'reached by roots, or never reached'],
+  [sw(GLASS.medal.gold, GLASS.medal.silver, GLASS.medal.bronze), 'The frame', 'the medal, in winter'],
 ];
-$('legend').innerHTML = LEGEND.map(([n, c, t]) => '<li><i style="background:' + c + '"></i><span><b style="color:var(--ink);font-weight:500">' + n + '</b>: ' + t + '</span></li>').join('');
+$('legend').innerHTML = LEGEND.map(([c, n, t]) => '<li><span class="sw">' + c + '</span><span><b style="color:var(--ink);font-weight:500">' + n + '</b>: ' + t + '</span></li>').join('');
 
 function label(w) { return w.date.slice(5).replace('-', '/') + ' · ' + w.by + ' · ' + w.facts.lemons + (w.facts.medal ? ' ' + w.facts.medal : ''); }
 $('years').innerHTML = WINDOWS.map((w, i) => '<button type="button" data-i="' + i + '" aria-pressed="' + (i === cur) + '">' + label(w) + '</button>').join('');
