@@ -109,7 +109,7 @@ pre { overflow-x: auto; font: .78rem/1.35 ui-monospace, 'SF Mono', Menlo, monosp
     <div class="others" id="others"></div>
   </section>
 
-  <p class="note">Version 2. The sky is cut into irregular panes and the year is set into it as glass: amber branches, merged leaves, lemons hanging from their branches and lighting the sky around them. Every colour is something that happened. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
+  <p class="note">Version 3. The sky is cut into irregular panes of several tints and the year is set into it as glass: amber branches, merged leaves, lemons hanging from their branches and lighting the sky around them. Every colour is something that happened. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
 </div>
 
 <script>
@@ -122,16 +122,16 @@ let cur = 0, timer = null;
 const sw = (...cs) => cs.map(c => '<i style="background:' + c + '"></i>').join('');
 const LEGEND = [
   [sw(GLASS.lead), 'Lead', 'every line of the window'],
-  [sw(...GLASS.sky.slice(0, 3)), 'Sky', 'lit by the water the tree held that day; in winter, each season’s water, spring at the bottom'],
+  [sw(...GLASS.sky.slice(0, 2), ...GLASS.skyTint.slice(0, 2)), 'Sky', 'lit by the water the tree held that day; in winter, each season’s water, spring at the bottom'],
   [sw(...GLASS.wood), 'Amber branches', 'wood that grew, in spring, summer or autumn, thicker toward the trunk'],
   [sw(GLASS.leaf[0][0], GLASS.leaf[1][0], GLASS.leaf[2][0]), 'Leaves', 'tinted by the season they grew; a gold glow if they fed growth'],
-  [sw(GLASS.lemon), 'Lemons', 'harvested, lighting the glass around them'],
+  [sw(GLASS.lemon, GLASS.stalk), 'Lemons', 'harvested, on green stalks, lighting the glass around them'],
   [sw(GLASS.winterLemon), 'Frost star', 'a sealed bud that woke as a winter lemon'],
   [sw(GLASS.petal[0]), 'Blossoms', 'larger the riper they were; grey if winter came first'],
   [sw(GLASS.bud), 'Rose buds', 'a sealed bud, pointing the way its branch grew'],
   [sw(GLASS.withered), 'Grey', 'withered in the frost; a dashed lemon fell'],
   [sw(GLASS.ruby, GLASS.emerald), 'Gems', 'rare pieces: a Crossing, a Fruiting Branch'],
-  [sw(GLASS.bead), 'Blue beads', 'root hairs, drinking'],
+  [sw(GLASS.hair, GLASS.bead), 'Root hairs', 'fine roots, each drinking a drop of water'],
   [sw(GLASS.lapis, GLASS.stone, GLASS.keepsake), 'In the soil', 'water found, stone, a keepsake with a page'],
   [sw(GLASS.soil[0], GLASS.dark), 'Soil', 'reached by roots, or never reached'],
   [sw(GLASS.medal.gold, GLASS.medal.silver, GLASS.medal.bronze), 'The frame', 'the medal, in winter'],

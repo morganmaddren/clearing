@@ -30,16 +30,18 @@ const f1 = n => n.toFixed(1);
 
 export const GLASS = {
   sky: ['#6f9fd2', '#7eaad8', '#6593c8', '#89b5dd', '#7399cc'],
+  // the odd pane of another tint, as real glass varies from sheet to sheet
+  skyTint: ['#6eaec6', '#8a90d4', '#79b3ad', '#9a8fcf', '#6aa2b8', '#a3b7dc'],
   lead: '#17171c', skyLead: '#26304a',
   // by the season a piece grew in: spring, summer, autumn
   leaf: [['#7fd36b', '#6cc964', '#8edb76'], ['#1f9655', '#25a25e', '#198a4c'], ['#8f9e2c', '#a3912b', '#7f9a35']],
   wood: ['#e0a54a', '#cf8a2a', '#b8662a'],
-  seed: '#8d4615',
+  seed: '#a85a1c',
   lemon: '#ffd51f', lemonDeep: '#f2b705', winterLemon: '#f4dc8e',
   petal: ['#fff6f8', '#ffffff', '#fff3df'], petalEdge: '#d98a9a',
   bud: '#c2405e', withered: '#8a8d93', witheredLeaf: '#7f857c',
-  soil: ['#6a452a', '#553823', '#42301f'], dark: '#120e0c', lapis: '#2b5fb8', stone: '#5f6166', keepsake: '#e0b84a', oldroot: '#7c5432',
-  ruby: '#d0213f', emerald: '#18b37a', bead: '#5aa7ff',
+  soil: ['#6a452a', '#553823', '#42301f'], dark: '#2a1e16', lapis: '#4a76ad', stone: '#5f6166', keepsake: '#e0b84a', oldroot: '#7c5432',
+  ruby: '#d0213f', emerald: '#18b37a', bead: '#7fb6e8', stalk: '#5c9e3a', hair: '#c9a173',
   medal: { gold: '#d9ab2c', silver: '#c5ccd6', bronze: '#b8743a', none: '#2b2c33' },
 };
 
@@ -88,16 +90,25 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     for (let i = gw - 1; i >= 0; i--) pts.push(v(x + i, y + gh));
     for (let j = gh - 1; j >= 1; j--) pts.push(v(x, y + j));
     // Some panes are cut on a diagonal, as real glass is, so the sky doesn't read as brickwork.
-    if (hash(seed, x, y, 14) < 0.38) {
-      const n = pts.length, cut = Math.floor(n / 2);
-      panes.push({ x, y, gw, gh, pts: pts.slice(0, cut + 1) }, { x, y, gw, gh, pts: [...pts.slice(cut), pts[0]], alt: true });
+    // Cuts go both ways; a single pane is sometimes cut twice from one corner into three triangles.
+    const cutR = hash(seed, x, y, 14);
+    const n = pts.length, rot = hash(seed, x, y, 15) < 0.5 ? 0 : gw;       // start at the top-left or top-right corner
+    const ring = [...pts.slice(rot), ...pts.slice(0, rot)];
+    if (cutR < 0.14 && gw === 1 && gh === 1) {
+      const [a, b, c, d] = ring, t = 0.35 + hash(seed, x, y, 16) * 0.3;
+      const p = [c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t];
+      panes.push({ x, y, gw, gh, pts: [a, b, p] }, { x, y, gw, gh, pts: [b, c, p], alt: 1 }, { x, y, gw, gh, pts: [a, p, d], alt: 2 });
+    } else if (cutR < 0.45) {
+      const cut = Math.floor(n / 2);
+      panes.push({ x, y, gw, gh, pts: ring.slice(0, cut + 1) }, { x, y, gw, gh, pts: [...ring.slice(cut), ring[0]], alt: 1 });
     } else panes.push({ x, y, gw, gh, pts });
   }
   const poly = pts => pts.map(p => `${f1(p[0])},${f1(p[1])}`).join(' ');
   let sky = '', skyLead = '';
   for (const p of panes) {
-    const salt = p.alt ? 3 : 0;
-    const base = GLASS.sky[Math.floor(hash(seed, p.x, p.y, 6 + salt) * GLASS.sky.length)];
+    const salt = (p.alt || 0) * 3;
+    const pal = hash(seed, p.x, p.y, 17 + salt) < 0.22 ? GLASS.skyTint : GLASS.sky;
+    const base = pal[Math.floor(hash(seed, p.x, p.y, 6 + salt) * pal.length)];
     const b = bright(p.y + (p.gh - 1) / 2) * (0.93 + hash(seed, p.x, p.y, 8 + salt) * 0.14);
     const g = Math.floor(hash(seed, p.x, p.y, 9 + salt) * 3);
     sky += `<polygon points="${poly(p.pts)}" fill="${shade(base, b)}"/><polygon points="${poly(p.pts)}" fill="url(#${id}-plane${g})"/>`;
@@ -138,7 +149,9 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     const k = kindOn(c);
     const wd = Math.max(4.5, 13 - c.depth * 0.9) * (c.dirs.length > 2 ? 0.9 : 1);
     const glass = c.piece === 'seed' ? GLASS.seed : k === 'withered' ? GLASS.withered : shade(GLASS.wood[season(c)], bright(c.y) * 1.05);
-    // A terminal piece (leaves, blossom, bud) still has a short stalk from its parent.
+    // A blossom or lemon hangs on its own thin green stalk (drawn with it, below). Leaves and buds
+    // still have a short stalk of wood from their parent.
+    if (c.piece === 'blossom') continue;
     const term = c.dirs.length === 1 && c.piece !== 'seed';
     for (const d of woodPaths(c, edgeMid)) wood += strip(d, term ? wd * 0.55 : wd, glass);
   }
@@ -158,14 +171,18 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     const out = angleOf(away(c));
     const blades = [];
     if (c.dirs.length === 1) {                         // a cluster of Leaves ends the branch
-      for (const s of [-46, 0, 46]) blades.push([mx, my, out + s + jit(c.x * 7 + c.y + s, 24), C * (s ? 0.62 : 0.72)]);
-    } else {                                           // leafy wood: a leaf either side of the branch
-      for (const s of [-1, 1]) blades.push([mx, my, out + s * (70 + jit(c.x * 5 + c.y + s, 30)), C * 0.6]);
+      for (const s of [-74, -37, 0, 37, 74]) blades.push([mx, my, out + s + jit(c.x * 7 + c.y + s, 20), C * (Math.abs(s) > 40 ? 0.52 : 0.66)]);
+    } else {                                           // leafy wood: leaves in pairs along the branch
+      const r = out * Math.PI / 180;
+      for (const [along, len] of [[-9, 0.55], [7, 0.5]]) {
+        const bx = mx + Math.cos(r) * along, by = my + Math.sin(r) * along;
+        for (const s of [-1, 1]) blades.push([bx, by, out + s * (58 + jit(c.x * 5 + c.y + s + along, 30)), C * len]);
+      }
     }
     const glass = dead(k) || k === 'withered' ? GLASS.witheredLeaf : shade(pick(GLASS.leaf[season(c)], c, 5), bright(c.y));
     for (const [x, y, a, len] of blades) {
-      const d = blade(x, y, a, len, len * 0.36);
-      leafOut += `<path d="${d}" stroke="${GLASS.lead}" stroke-width="4.6" stroke-linejoin="round" fill="${GLASS.lead}"/>`;
+      const d = blade(x, y, a, len, len * 0.3);
+      leafOut += `<path d="${d}" stroke="${GLASS.lead}" stroke-width="3.2" stroke-linejoin="round" fill="${GLASS.lead}"/>`;
       leafFill += `<path d="${d}" fill="${glass}"/>`;
       leafRib += `<path d="${rib(x, y, a, len)}"/>`;
       if (c.glowed && k !== 'withered') leafGlow += `<path d="${d}" fill="${GLASS.lemon}"/>`;
@@ -188,8 +205,19 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     let toDown = ((90 - (side ? perp : ang) + 540) % 360) - 180;
     if (Math.abs(toDown) === 180) toDown = hash(seed, c.x, c.y, 51) < 0.5 ? 180 : -180;
     const hangAng = (side ? perp : ang) + toDown * 0.62;
+    // The stalk: thin and green, from the branch to the fruit, a little askew.
+    if (c.blossom && (k === 'unripe' || k === 'lemon' || k === 'winter' || k === 'fallen')) {
+      const hr = hangAng * Math.PI / 180, back = k === 'unripe' ? 2 : 11;
+      const ex = hx - Math.cos(hr) * back, ey = hy - Math.sin(hr) * back;
+      const [sx, sy] = c.piece === 'fruiting' ? [mx, my] : edgeMid(c, c.entry ?? 'S');
+      const skew = (hash(seed, c.x, c.y, 52) < 0.5 ? -1 : 1) * (6 + hash(seed, c.x, c.y, 53) * 6);
+      const qx = (sx + ex) / 2 - Math.sin(hr) * skew, qy = (sy + ey) / 2 + Math.cos(hr) * skew;
+      const stalk = `M${f1(sx)},${f1(sy)} Q${f1(qx)},${f1(qy)} ${f1(ex)},${f1(ey)}`;
+      const green = dead(k) ? GLASS.withered : shade(GLASS.stalk, bright(c.y));
+      blossoms += `<path d="${stalk}" fill="none" stroke="${GLASS.lead}" stroke-width="5" stroke-linecap="round"/><path d="${stalk}" fill="none" stroke="${green}" stroke-width="2.4" stroke-linecap="round"/>`;
+    }
     if (k === 'unripe' && c.blossom) {
-      const sc = 0.55 + 0.5 * Math.min(1, ripeOn(c));
+      const sc = 0.8 + 0.5 * Math.min(1, ripeOn(c));
       const deadB = winter;
       const fill = deadB ? '#b9b6b0' : pick(GLASS.petal, c, 7);
       blossoms += `<g transform="translate(${f1(hx)},${f1(hy)}) rotate(${f1(hangAng + 90)}) scale(${f1(sc)})" stroke="${GLASS.lead}" stroke-width="2" stroke-linejoin="round">
@@ -220,7 +248,8 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     }
     if ((c.piece === 'crossing' || c.piece === 'fruiting') && k !== 'withered') {
       const gem = c.piece === 'crossing' ? GLASS.ruby : GLASS.emerald;
-      const [gx, gy] = c.piece === 'crossing' ? [mx, my] : [mx - (hx - mx) * 0.6, my - (hy - my) * 0.6];
+      // A Fruiting Branch's emerald sits on its wood, just past where the fruit hangs off it.
+      const [gx, gy] = c.piece === 'crossing' ? [mx, my] : [mx + Math.cos(ang * Math.PI / 180) * 11, my + Math.sin(ang * Math.PI / 180) * 11];
       gems += `<g transform="translate(${f1(gx)},${f1(gy)})"><polygon points="0,-6.5 6,0 0,6.5 -6,0" fill="${gem}" stroke="${GLASS.lead}" stroke-width="2"/><polygon points="0,-6.5 2.5,-1.5 0,0 -2.5,-1.5" fill="#ffffff" opacity=".45"/></g>`;
     }
   }
@@ -253,9 +282,20 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
       const paths = outs.length ? outs.map(d => { const [tx, ty] = smid(rc, d); return `M${f1(sx0)},${f1(sy0)} Q${f1(cx0 + jit(x * 9 + y + 700, 8))},${f1(cy0 + jit(x * 9 + y + 701, 8))} ${f1(tx)},${f1(ty)}`; })
         : [`M${f1(sx0)},${f1(sy0)} Q${f1(cx0)},${f1(cy0 - 4)} ${f1(cx0)},${f1(cy0 + 4)}`];
       for (const d of paths) roots += strip(d, wd, '#a77b4f');
-      if (r.hairs) for (let i = 0; i < 3; i++) {
-        const a = (hash(seed, x, y, 60 + i) * 2 - 1) * Math.PI * 0.6 + Math.PI / 2;
-        beads += `<circle cx="${f1(cx0 + Math.cos(a) * 12)}" cy="${f1(cy0 + 4 + Math.sin(a) * 9)}" r="3.4" fill="${GLASS.bead}" stroke="${GLASS.lead}" stroke-width="1.6"/>`;
+      if (r.hairs) {
+        // Root Hairs: fine roots fanning out from the root's end, each drinking a drop of water at its tip.
+        const into = angleOf(OPP[from]) * Math.PI / 180;
+        for (let i = 0; i < 4; i++) {
+          const a = into + (i - 1.5) * 0.55 + (hash(seed, x, y, 60 + i) - 0.5) * 0.4, len = 13 + hash(seed, x, y, 70 + i) * 7;
+          const tx = cx0 + Math.cos(a) * len, ty = cy0 + Math.sin(a) * len;
+          const kx = cx0 + Math.cos(a + 0.35) * len * 0.5, ky = cy0 + Math.sin(a + 0.35) * len * 0.5;
+          const hair = `M${f1(cx0)},${f1(cy0)} Q${f1(kx)},${f1(ky)} ${f1(tx)},${f1(ty)}`;
+          beads += `<path d="${hair}" fill="none" stroke="${GLASS.lead}" stroke-width="3.2" stroke-linecap="round"/><path d="${hair}" fill="none" stroke="${GLASS.hair}" stroke-width="1.3" stroke-linecap="round"/>`;
+          if (i % 2 === 0 || hash(seed, x, y, 80 + i) < 0.5) {
+            const dx = Math.cos(a), dy = Math.sin(a);
+            beads += `<path d="M${f1(tx)},${f1(ty)} C${f1(tx + dx * 2 - dy * 3.2)},${f1(ty + dy * 2 + dx * 3.2)} ${f1(tx + dx * 7 - dy * 3.2)},${f1(ty + dy * 7 + dx * 3.2)} ${f1(tx + dx * 7)},${f1(ty + dy * 7)} C${f1(tx + dx * 7 + dy * 3.2)},${f1(ty + dy * 7 - dx * 3.2)} ${f1(tx + dx * 2 + dy * 3.2)},${f1(ty + dy * 2 - dx * 3.2)} ${f1(tx)},${f1(ty)} Z" fill="${GLASS.bead}" stroke="${GLASS.lead}" stroke-width="1.5"/>`;
+          }
+        }
       }
     }
   }
