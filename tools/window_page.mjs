@@ -49,7 +49,7 @@ header p { margin: .3rem 0 0; color: var(--muted); max-width: 34rem; }
 .years button[aria-pressed="true"] { color: var(--night); background: var(--lemon); border-color: var(--lemon); }
 .years button:focus-visible, .controls button:focus-visible, input[type=range]:focus-visible, details summary:focus-visible, .others button:focus-visible { outline: 2px solid var(--lemon); outline-offset: 2px; }
 figure { margin: 0; display: grid; gap: .8rem; }
-.glass { width: 100%; max-width: 30rem; margin: 0 auto; aspect-ratio: 440 / 630; }
+.glass { width: 100%; max-width: 30rem; margin: 0 auto; aspect-ratio: 440 / 624; }
 .glass svg { width: 100%; height: 100%; display: block; }
 .when { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-variant-numeric: tabular-nums; }
 .when .day { font-family: var(--display); font-size: 1.35rem; }
@@ -69,7 +69,7 @@ summary { cursor: pointer; color: var(--muted); }
 pre { overflow-x: auto; font: .78rem/1.35 ui-monospace, 'SF Mono', Menlo, monospace; color: var(--ink); background: #070b1d; padding: .9rem; border-radius: 6px; }
 .others { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .9rem; }
 .others button { background: none; border: 0; padding: 0; color: var(--muted); font: .8rem var(--body); text-align: left; cursor: pointer; display: grid; gap: .3rem; }
-.others .thumb { aspect-ratio: 440 / 630; }
+.others .thumb { aspect-ratio: 440 / 624; }
 .others .thumb svg { width: 100%; height: 100%; display: block; }
 .others b { color: var(--ink); font-weight: 500; }
 .note { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--line); padding-top: 1rem; }
@@ -109,7 +109,7 @@ pre { overflow-x: auto; font: .78rem/1.35 ui-monospace, 'SF Mono', Menlo, monosp
     <div class="others" id="others"></div>
   </section>
 
-  <p class="note">Version 4. The sky is the garden's fingerprint: the same seed gives everyone the same panes and tints, so two hands on one garden share a sky and the year is set into it as glass: amber branches, merged leaves, lemons hanging from their branches and lighting the sky around them. Every colour is something that happened. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
+  <p class="note">Version 5. The sky is the garden's fingerprint: the same seed gives everyone the same panes and tints, so two hands on one garden share a sky and the year is set into it as glass: amber branches, merged leaves, lemons hanging from their branches and lighting the sky around them. Every colour is something that happened. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
 </div>
 
 <script>

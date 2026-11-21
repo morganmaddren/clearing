@@ -51,7 +51,7 @@ const LIGHT = '#fff0bf';
 
 export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
   const [cw, ch] = w.size.canopy, [sw, sh] = w.size.soil, so = w.size.soilOffset;
-  const M = 22, BAR = 12, PLAQUE = plaque ? 46 : 0;
+  const M = 22, BAR = 6, PLAQUE = plaque ? 46 : 0;
   const W = cw * C, Hc = ch * C, Hs = sh * C;
   const SX = so * C, SY = Hc + BAR;
   const total = SY + Hs;
@@ -153,7 +153,7 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
   for (const c of cells) {
     const k = kindOn(c);
     const wd = Math.max(4.5, 13 - c.depth * 0.9) * (c.dirs.length > 2 ? 0.9 : 1);
-    const glass = c.piece === 'seed' ? GLASS.seed : k === 'withered' ? GLASS.withered : shade(GLASS.wood[season(c)], bright(c.y) * 1.05);
+    const glass = c.piece === 'seed' ? shade(GLASS.wood[0], bright(c.y) * 0.92) : k === 'withered' ? GLASS.withered : shade(GLASS.wood[season(c)], bright(c.y) * 1.05);
     // A blossom or lemon hangs on its own thin green stalk (drawn with it, below). Leaves and buds
     // still have a short stalk of wood from their parent.
     if (c.piece === 'blossom') continue;
@@ -177,10 +177,10 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     const out = angleOf(away(c));
     const blades = [];
     if (c.dirs.length === 1) {                         // a cluster of Leaves ends the branch
-      for (const s of [-74, -37, 0, 37, 74]) blades.push([mx, my, out + s + jit(c.x * 7 + c.y + s, 26), C * (Math.abs(s) > 40 ? 0.52 : 0.66), Math.abs(s) > 40]);
+      for (const s of [-100, -70, -38, -12, 12, 38, 70, 100]) blades.push([mx, my, out + s + jit(c.x * 7 + c.y + s, 22), C * (Math.abs(s) > 60 ? 0.5 : 0.64), Math.abs(s) > 60]);
     } else {                                           // leafy wood: leaves in pairs along the branch
       const r = out * Math.PI / 180;
-      for (const [along, len] of [[-9, 0.55], [7, 0.5]]) {
+      for (const [along, len] of [[-13, 0.56], [-2, 0.52], [9, 0.48]]) {
         const bx = mx + Math.cos(r) * along, by = my + Math.sin(r) * along;
         for (const s of [-1, 1]) blades.push([bx, by, out + s * (58 + jit(c.x * 5 + c.y + s + along, 34)), C * len, null]);
       }
@@ -233,7 +233,7 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
       const sc = 0.8 + 0.5 * Math.min(1, ripeOn(c));
       const deadB = winter;
       const fill = deadB ? '#b9b6b0' : pick(GLASS.petal, c, 7);
-      blossoms += `<g transform="translate(${f1(hx)},${f1(hy)}) rotate(${f1(hangAng + 90)}) scale(${f1(sc)})" stroke="${GLASS.lead}" stroke-width="2" stroke-linejoin="round">
+      blossoms += `<g transform="translate(${f1(hx)},${f1(hy)}) rotate(${f1(hangAng - 90)}) scale(${f1(sc)})" stroke="${GLASS.lead}" stroke-width="2" stroke-linejoin="round">
         <path d="M0,-2 C-9,4 -13,14 -6,18 C-3,12 -1,8 0,6 Z" fill="${fill}"/>
         <path d="M0,-2 C9,4 13,14 6,18 C3,12 1,8 0,6 Z" fill="${fill}"/>
         <path d="M0,-2 C-6,6 -5,17 0,21 C5,17 6,6 0,-2 Z" fill="${fill}"/>
