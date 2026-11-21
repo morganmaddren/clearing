@@ -72,3 +72,19 @@ test('each game has a private notebook page, shown when you play it, kept apart 
   assert.equal(c.db.prepare('SELECT COUNT(*) n FROM notebook_pages').get().n, 0);
   await c.close();
 });
+
+test('a deploy never runs an old script against a new page: assets are named by their contents', async () => {
+  const c = await startClearing();
+  try {
+    const app = await c.call('GET', '/app');
+    assert.equal(app.headers.get('cache-control'), 'no-cache', 'pages are checked every time');
+    const js = /src="\/app\.js\?v=([0-9a-f]{12})"/.exec(app.data), css = /href="\/style\.css\?v=([0-9a-f]{12})"/.exec(app.data);
+    assert.ok(js && css, 'the page names the script and stylesheet by hash');
+    assert.match((await c.call('GET', `/app.js?v=${js[1]}`)).headers.get('cache-control'), /immutable/);
+    assert.match((await c.call('GET', `/style.css?v=${css[1]}`)).headers.get('cache-control'), /immutable/);
+    assert.equal((await c.call('GET', '/app.js?v=000000000000')).headers.get('cache-control'), 'no-cache', 'an old link always gets checked');
+    assert.equal((await c.call('GET', '/app.js')).headers.get('cache-control'), 'no-cache');
+    const door = await c.call('GET', '/');
+    assert.match(door.data, new RegExp(`href="/style\\.css\\?v=${css[1]}"`), 'the front door too');
+  } finally { await c.close(); }
+});
