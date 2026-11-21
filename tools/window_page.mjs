@@ -109,7 +109,7 @@ pre { overflow-x: auto; font: .78rem/1.35 ui-monospace, 'SF Mono', Menlo, monosp
     <div class="others" id="others"></div>
   </section>
 
-  <p class="note">Version 3. The sky is cut into irregular panes of several tints and the year is set into it as glass: amber branches, merged leaves, lemons hanging from their branches and lighting the sky around them. Every colour is something that happened. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
+  <p class="note">Version 4. The sky is the garden's fingerprint: the same seed gives everyone the same panes and tints, so two hands on one garden share a sky and the year is set into it as glass: amber branches, merged leaves, lemons hanging from their branches and lighting the sky around them. Every colour is something that happened. In winter the light runs up the window, spring at the bottom and autumn at the top, each as bright as that season's water. Drag back through the year to watch it grow.</p>
 </div>
 
 <script>

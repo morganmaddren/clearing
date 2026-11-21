@@ -104,10 +104,15 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     } else panes.push({ x, y, gw, gh, pts });
   }
   const poly = pts => pts.map(p => `${f1(p[0])},${f1(p[1])}`).join(' ');
+  // The sky is the garden's fingerprint: the same seed gives everyone the same sky, and each garden
+  // leans toward its own two tints, in its own share of panes.
+  const ti = Math.floor(hash(seed, 1, 2, 3) * GLASS.skyTint.length);
+  const tints = [GLASS.skyTint[ti], GLASS.skyTint[(ti + 1 + Math.floor(hash(seed, 4, 5, 6) * (GLASS.skyTint.length - 1))) % GLASS.skyTint.length]];
+  const tintShare = 0.12 + hash(seed, 7, 8, 9) * 0.2;
   let sky = '', skyLead = '';
   for (const p of panes) {
     const salt = (p.alt || 0) * 3;
-    const pal = hash(seed, p.x, p.y, 17 + salt) < 0.22 ? GLASS.skyTint : GLASS.sky;
+    const pal = hash(seed, p.x, p.y, 17 + salt) < tintShare ? tints : GLASS.sky;
     const base = pal[Math.floor(hash(seed, p.x, p.y, 6 + salt) * pal.length)];
     const b = bright(p.y + (p.gh - 1) / 2) * (0.93 + hash(seed, p.x, p.y, 8 + salt) * 0.14);
     const g = Math.floor(hash(seed, p.x, p.y, 9 + salt) * 3);
@@ -156,14 +161,15 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     for (const d of woodPaths(c, edgeMid)) wood += strip(d, term ? wd * 0.55 : wd, glass);
   }
 
-  // ---- leaves: one merged layer (all outlines, then all fills, so touching leaves join) ----
-  const blade = (x, y, ang, len, wid) => {
+  // ---- leaves: each blade its own piece of glass, no two alike; some sit behind the branches ----
+  const blade = (x, y, ang, len, wid, bend) => {
     const r = ang * Math.PI / 180, ux = Math.cos(r), uy = Math.sin(r), px = -uy, py = ux;
     const P = (a, b) => `${f1(x + ux * a + px * b)},${f1(y + uy * a + py * b)}`;
-    return `M${P(0, 0)} C${P(len * 0.3, wid)} ${P(len * 0.75, wid * 0.9)} ${P(len, 0)} C${P(len * 0.75, -wid * 0.9)} ${P(len * 0.3, -wid)} ${P(0, 0)} Z`;
+    // bend: the blade curves a little to one side, so it isn't a mirror image of itself
+    return `M${P(0, 0)} C${P(len * 0.3, wid + bend)} ${P(len * 0.75, wid * 0.8 + bend)} ${P(len, bend * 1.4)} C${P(len * 0.75, -wid * 0.9 + bend)} ${P(len * 0.3, -wid + bend * 0.4)} ${P(0, 0)} Z`;
   };
-  const rib = (x, y, ang, len) => { const r = ang * Math.PI / 180; return `M${f1(x)},${f1(y)} L${f1(x + Math.cos(r) * len * 0.85)},${f1(y + Math.sin(r) * len * 0.85)}`; };
-  let leafOut = '', leafFill = '', leafRib = '', leafGlow = '';
+  const rib = (x, y, ang, len, bend) => { const r = ang * Math.PI / 180, ux = Math.cos(r), uy = Math.sin(r); return `M${f1(x)},${f1(y)} Q${f1(x + ux * len * 0.5 - uy * bend)},${f1(y + uy * len * 0.5 + ux * bend)} ${f1(x + ux * len * 0.85 - uy * bend * 1.2)},${f1(y + uy * len * 0.85 + ux * bend * 1.2)}`; };
+  let leavesBack = '', leavesFront = '', leafGlow = '';
   for (const c of cells) {
     const k = kindOn(c);
     if (!c.leaf) continue;
@@ -171,22 +177,29 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     const out = angleOf(away(c));
     const blades = [];
     if (c.dirs.length === 1) {                         // a cluster of Leaves ends the branch
-      for (const s of [-74, -37, 0, 37, 74]) blades.push([mx, my, out + s + jit(c.x * 7 + c.y + s, 20), C * (Math.abs(s) > 40 ? 0.52 : 0.66)]);
+      for (const s of [-74, -37, 0, 37, 74]) blades.push([mx, my, out + s + jit(c.x * 7 + c.y + s, 26), C * (Math.abs(s) > 40 ? 0.52 : 0.66), Math.abs(s) > 40]);
     } else {                                           // leafy wood: leaves in pairs along the branch
       const r = out * Math.PI / 180;
       for (const [along, len] of [[-9, 0.55], [7, 0.5]]) {
         const bx = mx + Math.cos(r) * along, by = my + Math.sin(r) * along;
-        for (const s of [-1, 1]) blades.push([bx, by, out + s * (58 + jit(c.x * 5 + c.y + s + along, 30)), C * len]);
+        for (const s of [-1, 1]) blades.push([bx, by, out + s * (58 + jit(c.x * 5 + c.y + s + along, 34)), C * len, null]);
       }
     }
-    const glass = dead(k) || k === 'withered' ? GLASS.witheredLeaf : shade(pick(GLASS.leaf[season(c)], c, 5), bright(c.y));
-    for (const [x, y, a, len] of blades) {
-      const d = blade(x, y, a, len, len * 0.3);
-      leafOut += `<path d="${d}" stroke="${GLASS.lead}" stroke-width="3.2" stroke-linejoin="round" fill="${GLASS.lead}"/>`;
-      leafFill += `<path d="${d}" fill="${glass}"/>`;
-      leafRib += `<path d="${rib(x, y, a, len)}"/>`;
+    const base = pick(GLASS.leaf[season(c)], c, 5);
+    blades.forEach(([x, y, a0, len0, side], i) => {
+      const h = n => hash(seed, c.x, c.y, 90 + i * 7 + n);
+      const len = len0 * (0.82 + h(0) * 0.36), wid = len * (0.24 + h(1) * 0.12), bend = (h(2) - 0.5) * len * 0.3;
+      // A blade that would reach into the ground turns up instead.
+      let a = a0;
+      const tipY = y + Math.sin(a * Math.PI / 180) * len;
+      if (tipY > Hc - 5) a = -a;
+      const d = blade(x, y, a, len, wid, bend);
+      const glass = dead(k) || k === 'withered' ? GLASS.witheredLeaf : shade(mix(base, h(3) < 0.5 ? '#ffffff' : '#0b3d22', h(4) * 0.18), bright(c.y));
+      const piece = `<path d="${d}" fill="${glass}" stroke="${GLASS.lead}" stroke-width="2.6" stroke-linejoin="round"/><path d="${rib(x, y, a, len, bend * 0.6)}" fill="none" stroke="${GLASS.lead}" stroke-width="1.1" opacity=".55"/>`;
+      // Some leaves sit behind the wood (the outer blades of a cluster, and about a third of the rest).
+      if (side === true || (side === null && h(5) < 0.35)) leavesBack += piece; else leavesFront += piece;
       if (c.glowed && k !== 'withered') leafGlow += `<path d="${d}" fill="${GLASS.lemon}"/>`;
-    }
+    });
   }
 
   // ---- blossoms, side on: three petals, larger as they ripen ----
@@ -331,10 +344,10 @@ export function windowSvg(w, { day = WINTER, id = 'w', plaque = true } = {}) {
     <g fill="none" stroke="${GLASS.lead}" stroke-width="2.4" stroke-linejoin="round">${soilLead}</g>
     <rect x="0" y="0" width="${W}" height="${total}" fill="#000" filter="url(#${id}-grain)"/>
     ${roots}${beads}
-    ${wood}
     <g opacity=".75" filter="url(#${id}-blur)">${leafGlow}</g>
-    ${leafOut}${leafFill}
-    <g fill="none" stroke="${GLASS.lead}" stroke-width="1.1" opacity=".55">${leafRib}</g>
+    ${leavesBack}
+    ${wood}
+    ${leavesFront}
     ${blossoms}${buds}${gems}${lemons}
   </g>
   <rect x="-4" y="${Hc}" width="${W + 8}" height="${BAR}" fill="${GLASS.lead}" rx="2"/>
